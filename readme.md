@@ -50,10 +50,11 @@ target, labels = ids.gen_model(ids.corner_vowels)
 niw = NormalInverseWishart.with_vague_prior(target)
 t = Teacher(target, niw, crp_alpha=1.0)
 # plot_diagnostics produces plots in real time
-t.mh(250, burn=200, lag=10, plot_diagnostics=True)
+t.mh(250, burn=10, lag=10, plot_diagnostics=True)
 ```
 
  You should see something like this:
+ ![Corner vowel analysis](figure_1.png)
 
 
 **NOTE**: If you intend to recreate the entire experiment (by providing `ids.gen_model` with `ids.all_the_vowels`), be prepared to devote several hours---or more, depending on your machine---to computation.
