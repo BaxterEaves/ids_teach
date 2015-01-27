@@ -24,7 +24,7 @@ def dist(a, b):
         >>> a = np.array([1.2, -3.4])
         >>> b = np.array([0.0, 6.8])
         >>> dist(a, b)
-        10.2878569197
+        10.270345661174213
     """
     return np.sum((a-b)**2.0)**.5
 
@@ -160,7 +160,7 @@ def parition_generator(n):
     # generator
     k = np.zeros(n, dtype=np.dtype(int))
     Z = np.zeros(n, dtype=np.dtype(int))
-    h = np.zeros(n, dtype=np.dtype(float))
+    h = [float(n)]
     yield(Z)
     while next_partition(Z, k, h) is not None:
         yield(Z)
