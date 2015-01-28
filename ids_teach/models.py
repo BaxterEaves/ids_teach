@@ -70,6 +70,42 @@ class CollapsibleDistribution(object):
         '''
         pass
 
+    @staticmethod
+    def draw_data_from_params(*params, **kwargs):
+        '''
+        Draw data from the likelihood params.
+        '''
+        pass
+
+    @staticmethod
+    def validate_target_model(target_model):
+        """
+        Input validation. Checks for standard structure items. Model-dependent checks should be
+        implemented in their respective classes. See NormalInverseWishart for an example.
+        """
+        d = target_model.get('d')
+        parameters = target_model.get('parameters')
+        assignment = target_model.get('assignment')
+
+        if d is None:
+            raise KeyError('Target model should have key "d" (int, num_dimensions')
+        if not isinstance(d, int):
+            raise TypeError('Target["d"] should be an int.')
+
+        if parameters is None:
+            raise KeyError('Target model should have key "parameters" (list of component parameters)')
+        if not isinstance(parameters, list):
+            raise TypeError('Parameters must be a list')
+        for params_k in parameters:
+            if not isinstance(params_k, tuple):
+                raise TypeError('Each entry in parameters must be a tuple')
+
+        if assignment is None:
+            raise KeyError('Target model should have key "assignment" (data partition)')
+        if not isinstance(assignment, np.ndarray):
+            raise TypeError('Assignment must be a numpy array')
+        if not np.result_type(assignment) == np.dtype(int):
+            raise TypeError('Assignment must an integer array.')
 
 # _________________________________________________________________________________________________
 # Normal w/ Normal, Inverse-Wishart prior TODO: fill out docstring
@@ -130,8 +166,8 @@ class NormalInverseWishart(CollapsibleDistribution):
 
     @staticmethod
     def update_parameters(X, _mu, _lambda, _kappa, _nu, _d):
-        xbar = np.mean(X, 0)
         n = X.shape[0]
+        xbar = np.mean(X, axis=0)
         kappa_n = _kappa + n
         nu_n = _nu + n
         mu_n = (_kappa*_mu + n*xbar)/kappa_n
@@ -142,6 +178,7 @@ class NormalInverseWishart(CollapsibleDistribution):
         back = np.dot(dt.T, dt)
         lambda_n = _lambda + S + (_kappa*n/kappa_n)*back
 
+        # import pdb; pdb.set_trace()
         assert(mu_n.shape[0] == _mu.shape[0])
         assert(lambda_n.shape[0] == _lambda.shape[0])
         assert(lambda_n.shape[1] == _lambda.shape[1])
@@ -151,8 +188,9 @@ class NormalInverseWishart(CollapsibleDistribution):
     @staticmethod
     def calc_log_z(_mu, _lambda, _kappa, _nu):
         d = len(_mu)
+        sign, detr = slogdet(_lambda)
         log_z = LOG2*(_nu*d/2.0)  + (d/2.0)*log(2*pi/_kappa) + multigammaln(_nu/2, d) -\
-            (_nu/2.0)*slogdet(_lambda)[1]
+            (_nu/2.0)*detr
 
         return log_z
 
@@ -167,6 +205,30 @@ class NormalInverseWishart(CollapsibleDistribution):
     def draw_data_from_prior(self, n):
         return np.random.multivariate_normal(self.mu_0, self.lambda_0/self.kappa_0, n)
 
+    @staticmethod
+    def draw_data_from_params(*args, **kwargs):
+        '''
+        Draw
+        '''
+        n = kwargs.get('n', 1)
+        return np.random.multivariate_normal(args[0], args[1], n)
+
+    @staticmethod
+    def validate_target_model(target_model):
+        CollapsibleDistribution.validate_target_model(target_model)
+        for params_k in target_model['parameters']:
+            if len(params_k) != 2:
+                raise ValueError("Each parameter tuple must have two entrird (mean, variance/covaraince)")
+            m, s = params_k
+            if not isinstance(m, np.ndarray):
+                raise TypeError('Each mean must be a numpy array')
+            if not len(m) == target_model['d']:
+                raise ValueError('Each mean must have d dimensions')
+
+            if not isinstance(s, np.ndarray):
+                raise TypeError('Each variance/covariance must be a numpy array')
+            if not (s.shape[0] == target_model['d'] and s.shape[1] == target_model['d']):
+                raise TypeError('Each coavariance matrix should be d rows by d coolumns')
 
 # _________________________________________________________________________________________________
 # multiprocessing helper functions
@@ -233,6 +295,8 @@ def do_log_marginals(model, X, Z, k, h, crp_alpha, num_to_do):
 
     return ret
 
+
+# _________________________________________________________________________________________________
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 if __name__ == "__main__":
     import doctest

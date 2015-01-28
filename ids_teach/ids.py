@@ -239,7 +239,7 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False):
 
     model = {
         'parameters': parameters,
-        'assignment': np.array(assignment, dtype=int),
+        'assignment': np.array(assignment, dtype=np.dtype(int)),
         'd': 2
     }
     return model, which_phonemes
@@ -365,7 +365,7 @@ def plot_phoneme_articulation(teacher_data, target_model, labels):
     plt.xticks(label_x, pair_labels, rotation='vertical')
 
 
-def plot_phoneme_variance(teacher_data, target_model, labels):
+def plot_phoneme_variation(teacher_data, target_model, labels):
     """
     Plots the change in F1 and F2 varaince and F1-F2 covariance for each phoneme from ADS to
     optimized data.

@@ -3,6 +3,7 @@ import multiprocessing as mp
 
 from ids_teach import utils
 from ids_teach import models
+import pickle
 import copy
 import time
 
@@ -32,20 +33,25 @@ class Teacher(object):
         data_model (CollapsibleDistribution): The model the data follow
         crp_alpha (float): Concentration parameter for CRP
     '''
-    def __init__(self, target, data_model, crp_alpha, t_std=50, use_mp=False, fast_niw=True):
+    def __init__(self, target, data_model, crp_alpha, t_std=50, use_mp=False, fast_niw=True,
+                 yes=False):
         n = len(target['assignment'])
-        if n > 12:
-            raise ValueError("n is too large")
-
-        # TODO: figure out why this doesn't work
-        # if not isinstance(data_model, models.CollapsibleDistribution):
-        #     raise TypeError("model ({}) bust be models.CollapsibleDistribution")
+        if n > 12 and not yes:
+            raise ValueError("**WARNING: n is very large. Exiting. Bypass with yes=True")
 
         # TODO: More input validation
+        if not isinstance(data_model, models.CollapsibleDistribution):
+            raise TypeError('data_model should be type models.CollapsibleDistribution')
+
+        data_model.validate_target_model(target)
 
         self._use_mp = use_mp
         self._num_procs = mp.cpu_count()
         self._fast_niw = fast_niw
+
+        if utils.bell_number(n)/float(self._num_procs) < 20 and self._use_mp:
+            print("**WARNING: The target conditions favor serial execution. Switching off multiprocessing.")
+            self._use_mp = False
 
         self.t_std = t_std
         self.target = target
@@ -179,6 +185,7 @@ class Teacher(object):
 
             if np.log(np.random.rand()) < logp_prime - self.logp:
                 self.__accept_data(X_prime, logp_prime)
+                # import pdb; pdb.set_trace()
             total_iters += 1
             pbar.update(total_iters)
 
@@ -204,8 +211,11 @@ class Teacher(object):
             self.__calibrate_proposal_distribution()
 
             if plot_diagnostics and itr > 1:
-                plt.cla()
+                plt.clf()
+                plt.subplot(1,2,1)
                 utils.plot_data_2d(self.data, self.target)
+                plt.subplot(1,2,2)
+                plt.plot(self.logps)
                 plt.draw()
                 # time.sleep(0.05)
 
@@ -217,6 +227,27 @@ class Teacher(object):
         """
         self.data = []
         self.logps = []
+
+    def get_stacked_data(self):
+        """
+        Returns the data as a single numpy array along with a n*k-length list labeling each datum
+        """
+        Z = [0]*self._n
+        data = np.copy(self.data[0])
+
+        for i in range(1, len(self.data)):
+            Z += [i]*self._n
+            data = np.vstack((data, np.copy(self.data[i])))
+
+        return data, Z
+
+    def save(self, filename, labels=None):
+        to_save = {
+            'data': self.data,
+            'target': self.target,
+            'labels': labels
+        }
+        pickle.dump(to_save, open(filename, "wb"))
 
     def __accept_data(self, X_prime, logp_prime):
         """
