@@ -2,23 +2,48 @@
 This is the code used to generate data in the paper `cite`
 
 ## Insallation
-The installation proceedure has been tested only on Mac OSX Yosimite.
-### Requirements (OSX)
+The installation proceedure has been tested only on Mac OSX Yosimite. Requires python 3. You can install python3x with [homebrew](http://brew.sh/)
 
-For the python parts, run
+    $ brew update
+    $ brew install python3
+
+Install virtual environment, virtual environment, and create a virtual environment. This allows you to keep the python packages required for this software.
+
+```bash
+$ cd ids_teach
+$ sudo pip install virtualenv
+$ sudo pip install virtualenvwrapper
+$ mkvirtualenv -r requirements.txt --python=`which python3.3` -a ids
+(ids)$
+```
+
+To use this code in the future you need only type the following command
+
+```bash
+$ workon ids
+```
+### Requirements (OSX)
+<!-- For the python parts, run
 
 ```bash
 $ pip install -r requirements.txt
-```
-For the C++ parts you will need the [Armadillo linear algebra library](http://arma.sourceforge.net/download.html). You can install it with [homebrew](http://brew.sh/).
+``` -->
+For the C++ parts you will need the [Armadillo linear algebra libraryy](http://arma.sourceforge.net/download.html). You can install it with [homebrew](http://brew.sh/). 
+
+**Note**: Homebrew installs are not specific to the virtual environment. If you have a version of armadillo installed (you would know if you did), this will create a symbolic link that may break compile processes for other code you have.
 
 ```bash
 $ brew update
 $ brew install armadillo
 ```
 
-### Testing
+### Compile (may require `sudo`)
+```bash
+$ python setup.py build_ext --inplace
+```
+You should be good-to-go now.
 
+### Testing (you should *really* do this before you run anything)
 To run tests of the python code
 
 ```bash
@@ -27,7 +52,7 @@ $ py.test
 
 ```
 
-To run (adhoc) tests of the C++ code:
+To run (ad-hoc) tests of the C++ code:
 
 ```bash
 $ cd cpp
@@ -36,25 +61,95 @@ $ make runtest
 
 ## Use
 
-An example can be found in `main.py`.
+`main.py` is your entry point to all pre-built analyses. To run a simple example on toy data:
 
+```bash
+$ python main.py --example
+```
+
+### Reproducing the paper analyses
+**NOTE**: The data used in the paper is included in the repository so that users can quickly reproduce analyses. If you intend to simulate your own data (using `python main.py --rebuild`),please keep in mind that the original analyses took several days to complete.
+
+To recreate the original paper figures:
+```bash
+$ python main.py --paperfigs  # using default data
+$ python main.py --paperfigs --filename path/to/data.pkl  # using rebuilt data
+```
+
+To rerun the algorithm learning performance comparison (`FIXME: tablename`):
+```bash
+$ python main.py --algcomp  # using default data
+$ python main.py --algcomp --filename path/to/data.pkl  # using rebuilt data
+```
+
+### General use (generate a teaching set from an arbitrary target model)
+
+An example can be found in `main.py`.
+####Step 1. Specify a target model
 ```python
-from ids_teach import ids
 from ids_teach import utils
 from ids_teach.teacher import Teacher
 from ids_teach.models import NormalInverseWishart
+import numpy as np
 
-# generate corner-vowel-only model
-target, labels = ids.gen_model(ids.corner_vowels)
-# create a data model, give it to the teacher and generate optimized teaching data
-niw = NormalInverseWishart.with_vague_prior(target)
-t = Teacher(target, niw, crp_alpha=1.0)
-# plot_diagnostics produces plots in real time
-t.mh(250, burn=10, lag=10, plot_diagnostics=True)
+# triangle
+cov_a = np.eye(2)*.2
+cov_b = np.eye(2)*.2
+cov_c = np.eye(2)*.2
+mean_a = np.array([-2.0, 0.0])
+mean_b = np.array([2.0, 0.0])
+mean_c = np.array([0.0, 1.6])
+
+target_model = {
+    'd': 2,
+    'parameters': [
+        (mean_a, cov_a),
+        (mean_b, cov_b),
+        (mean_c, cov_c),
+        ],
+    'assignment': np.array([0, 1, 2], dtype=np.dtype(int)) # one data point per component
+}
 ```
 
- You should see something like this:
- ![Corner vowel analysis](figure_1.png)
+####Step 2. Set up a data model by specifying a prior
+```python
+prior = {
+        'nu_0': 3,
+        'kappa_0': 1,
+        'mu_0': np.zeros(2),
+        'lambda_0': np.eye(2)*.5
+    }
 
+data_model = NormalInverseWishart(**prior)
+```
 
-**NOTE**: If you intend to recreate the entire experiment (by providing `ids.gen_model` with `ids.all_the_vowels`), be prepared to devote several hours---or more, depending on your machine---to computation.
+...or alternatively alternatively, let `NormalInverseWishart` build its own vague prior from the target model...
+
+```python
+data_model = NormalInverseWishart.with_vague_prior(target_model)
+```
+
+####Step 3. Create a `Teacher` and run the sampler
+```python
+n = 500
+t = Teacher(target_model, data_model, crp_alpha=1.0, t_std=1, fast_niw=True)
+t.mh(n, burn=500, lag=10, plot_diagnostics=False)
+```
+
+####Step 4. Get the data and visualize
+```python
+X_orig = np.vstack((np.random.multivariate_normal(mean_a, cov_a, n),
+                    np.random.multivariate_normal(mean_b, cov_b, n),
+                    np.random.multivariate_normal(mean_c, cov_c, n)))
+X_opt, _ = t.get_stacked_data()
+
+#plot
+plt.figure(tight_layout=True, facecolor='white')
+plt.scatter(X_opt[:, 0], X_opt[:, 1], color='blue', alpha=.5, label='optimized')
+plt.scatter(X_orig[:, 0], X_orig[:, 1], color='red', alpha=.5, label='original')
+plt.legend(loc=0)
+plt.show()
+```
+
+You should see something like this (this figure demonstrates both hyperarticulation and variance increase):
+![Corner vowel analysiss](figure_1.png)
