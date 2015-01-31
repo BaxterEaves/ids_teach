@@ -64,21 +64,21 @@ int main(){
     //=============================================================================================
     double logp, Z_0;
     Z_0 = calc_log_z(L0_generic, K0_generic, V0_generic);
-    logp = lgniwml(X_single, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
+    logp = lgniwml_arma(X_single, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
     std::cout << "generic marginal (single), should be " << -5.5861321608291
               << ", is " << logp << std::endl;
 
-    logp = lgniwml(X_multi, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
+    logp = lgniwml_arma(X_multi, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
     std::cout << "generic marginal (mulit), should be " << -16.3923777220275
               << ", is " << logp << std::endl;
 
 
     Z_0 = calc_log_z(L0_random, K0_random, V0_random);
-    logp = lgniwml(X_single, M0_random, L0_random, K0_random, V0_random, Z_0);
+    logp = lgniwml_arma(X_single, M0_random, L0_random, K0_random, V0_random, Z_0);
     std::cout << "random marginal (single), should be " << -6.60964751885643
               << ", is " << logp << std::endl;
 
-    logp = lgniwml(X_multi, M0_random, L0_random, K0_random, V0_random, Z_0);
+    logp = lgniwml_arma(X_multi, M0_random, L0_random, K0_random, V0_random, Z_0);
     std::cout << "random marginal (mulit), should be " << -19.5739755706395
               << ", is " << logp << std::endl;
 
