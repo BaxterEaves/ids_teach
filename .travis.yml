@@ -10,11 +10,11 @@ python:
     - 3.3
     - 3.4
 
-before_install:
-    - apt-get install liblapack-dev
-    - apt-get install libblas-dev
-    - apt-get install libboost-dev
-    - apt-get install libarmadillo-dev
+# before_install:
+#     - apt-get install liblapack-dev
+#     - apt-get install libblas-dev
+#     - apt-get install libboost-dev
+#     - apt-get install libarmadillo-dev
 
 install:
     - pip install .
