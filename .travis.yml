@@ -3,7 +3,7 @@ language: python
 sudo: true
 
 env:
-    TRAVIS_BUILD_APT_WHITELISTliblapack-dev,libblas-dev,libboost-dev,libarmadillo-dev
+    TRAVIS_BUILD_APT_WHITELIST=liblapack-dev,libblas-dev,libboost-dev,libarmadillo-dev
 
 python:
     - 2.7
