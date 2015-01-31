@@ -12,7 +12,7 @@ sns.set_palette("gray")
 # Data taken from hillenbrand
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 all_the_vowels = ['AE', 'AH', 'AW', 'EH', 'EI', 'ER', 'IH', 'IY', 'OA', 'OO', 'UH', 'UW']
-corner_vowels = ['AH', 'IY', 'UW']
+corner_vowels = ['AH', 'IY', 'UW']  # FIXME: check this
 
 hillenbrand_data = {
     'AE': {
@@ -222,7 +222,7 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False):
                [  -417.92907801,  42130.33998227]]))
     '''
     if not which_phonemes:
-        which_phonemes = hillenbrand_data.keys()
+        which_phonemes = all_the_vowels
 
     parameters = []
     assignment = []
@@ -370,6 +370,7 @@ def plot_phoneme_variation(teacher_data, target_model, labels):
     Plots the change in F1 and F2 varaince and F1-F2 covariance for each phoneme from ADS to
     optimized data.
     """
+    # FIXME: fill in
     pass
 
 if __name__ == "__main__":
