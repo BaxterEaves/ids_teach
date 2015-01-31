@@ -2,22 +2,20 @@ language: python
 
 sudo: true
 
-env:
-    TRAVIS_BUILD_APT_WHITELIST=liblapack-dev,libblas-dev,libboost-dev,libarmadillo-dev
+addons:
+    apt_packages:
+        - liblapack-dev
+        - libblas-dev
+        - libboost-dev
+        - libarmadillo-dev
 
 python:
     - 2.7
     - 3.3
     - 3.4
 
-# before_install:
-#     - apt-get install liblapack-dev
-#     - apt-get install libblas-dev
-#     - apt-get install libboost-dev
-#     - apt-get install libarmadillo-dev
-
 install:
-    - pip install .
+    - python setup.py install
 
 script:
     - cd ids_teach/tests && py.test
