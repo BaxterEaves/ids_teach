@@ -10,10 +10,9 @@ The installation proceedure has been tested only on Mac OSX Yosimite. Requires p
 Install virtual environment, virtual environment, and create a virtual environment. This allows you to keep the python packages required for this software.
 
 ```bash
-$ cd ids_teach
 $ sudo pip install virtualenv
 $ sudo pip install virtualenvwrapper
-$ mkvirtualenv -r requirements.txt --python=`which python3.3` -a ids
+$ mkvirtualenv --python=`which python3.3` ids
 (ids)$
 ```
 
@@ -37,9 +36,10 @@ $ brew update
 $ brew install armadillo
 ```
 
-### Compile (may require `sudo`)
+### Install (may require `sudo`).
+From inside the virtual environment navigate to the main directory (the directory with this readme)
 ```bash
-$ python setup.py build_ext --inplace
+(ids)$ pip install .
 ```
 You should be good-to-go now.
 
@@ -47,16 +47,16 @@ You should be good-to-go now.
 To run tests of the python code
 
 ```bash
-$ cd ids_teach/tests
-$ py.test
+(ids)$ cd ids_teach/tests
+(ids)$ py.test
 
 ```
 
 To run (ad-hoc) tests of the C++ code:
 
 ```bash
-$ cd cpp
-$ make runtest
+(ids)$ cd cpp
+(ids)$ make runtest
 ```
 
 ## Use
@@ -64,7 +64,7 @@ $ make runtest
 `main.py` is your entry point to all pre-built analyses. To run a simple example on toy data:
 
 ```bash
-$ python main.py --example
+(ids)$ python main.py --example
 ```
 
 ### Reproducing the paper analyses
@@ -72,14 +72,14 @@ $ python main.py --example
 
 To recreate the original paper figures:
 ```bash
-$ python main.py --paperfigs  # using default data
-$ python main.py --paperfigs --filename path/to/data.pkl  # using rebuilt data
+(ids)$ python main.py --paperfigs  # using default data
+(ids)$ python main.py --paperfigs --filename path/to/data.pkl  # using rebuilt data
 ```
 
 To rerun the algorithm learning performance comparison (`FIXME: tablename`):
 ```bash
-$ python main.py --algcomp  # using default data
-$ python main.py --algcomp --filename path/to/data.pkl  # using rebuilt data
+(ids)$ python main.py --algcomp  # using default data
+(ids)$ python main.py --algcomp --filename path/to/data.pkl  # using rebuilt data
 ```
 
 ### General use (generate a teaching set from an arbitrary target model)
