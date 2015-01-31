@@ -4,16 +4,12 @@ python:
     - 3.3
     - 3.4
 
-env:
-    - BACKEND=c
-    - BACKEND=cpp
-
 before_install:
     - sudo apt-get update
     - sudo apt-get install liblapack-dev
     - sudo apt-get install libblas-dev
     - sudo apt-get install libboost-dev
-    - sudo apt-get install sudo apt-get install libarmadillo-dev
+    - sudo apt-get install libarmadillo-dev
 
 install:
     - sudo pip install .
