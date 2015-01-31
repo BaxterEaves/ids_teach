@@ -1,11 +1,15 @@
 language: python
+
+sudo: true
+
+TRAVIS_BUILD_APT_WHITELIST=liblapack-dev,libblas-dev,libboost-dev,libarmadillo-dev
+
 python:
     - 2.7
     - 3.3
     - 3.4
 
 before_install:
-    - apt-get update
     - apt-get install liblapack-dev
     - apt-get install libblas-dev
     - apt-get install libboost-dev
