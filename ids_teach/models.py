@@ -1,5 +1,6 @@
 import numpy as np
 
+from ids_teach import niw_module as niwm
 from ids_teach import utils
 
 from scipy.special import multigammaln
@@ -195,12 +196,26 @@ class NormalInverseWishart(CollapsibleDistribution):
         return log_z
 
     def log_marginal_likelihood(self, X):
-        n = X.shape[0]
-        params_n = self.update_parameters(X, self.mu_0, self.lambda_0, self.kappa_0,
-                                          self.nu_0, self.d)
-        log_z_n = self.calc_log_z(*params_n)
+        # n = X.shape[0]
+        # params_n = self.update_parameters(X, self.mu_0, self.lambda_0, self.kappa_0,
+        #                                   self.nu_0, self.d)
+        # log_z_n = self.calc_log_z(*params_n)
 
-        return log_z_n - self.log_z - LOG2PI*(n*self.d/2)
+        # return log_z_n - self.log_z - LOG2PI*(n*self.d/2)
+        return niwm.niw_ml(X, self.lambda_0, self.mu_0, self.kappa_0, self.nu_0, self.log_z)
+
+    def log_posterior_predictive(self, Y, X):
+        # n = X.shape[0]
+        # YX = np.vstack((Y,X))
+        # params_n = self.update_parameters(X, self.mu_0, self.lambda_0, self.kappa_0,
+        #                                   self.nu_0, self.d)
+        # params_m = self.update_parameters(YX, self.mu_0, self.lambda_0, self.kappa_0,
+        #                                   self.nu_0, self.d)
+        # log_z_n = self.calc_log_z(*params_n)
+        # log_z_m = self.calc_log_z(*params_m)
+
+        # return log_z_m - log_z_n - LOG2PI*(self.d/2)
+        return niwm.niw_pp(Y, X, self.lambda_0, self.mu_0, self.kappa_0, self.nu_0)
 
     def draw_data_from_prior(self, n):
         return np.random.multivariate_normal(self.mu_0, self.lambda_0/self.kappa_0, n)
