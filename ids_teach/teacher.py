@@ -102,6 +102,7 @@ class Teacher(object):
             pbar.finish()
             print('Done.')
         else:
+            self._num_procs = 1
             self.ks = [k]
             self.zs = [z]
             self.hs = [h]
@@ -126,47 +127,33 @@ class Teacher(object):
         """
         Evaluate the probability of the data, X, given the optimal IGMM teacher model
         """
+        # in python 3, map returns a generator--we use a lambda to make it a list
+        mapper = self.pool.map if self._use_mp else lambda f, args : [res for res in map(f, args)]
 
         numer = 0
-
         for z, theta in enumerate(self.target['parameters']):
             Y = X[np.nonzero(self.target['assignment'] == z)[0], :]
-            numer += self.data_model.log_likelihood(Y, *theta) + self.data_model.log_prior(*theta)
+            # the prior cancels out in the acceptance ratio so there is no need to calculate it.
+            numer += self.data_model.log_likelihood(Y, *theta) # + self.data_model.log_prior(*theta)
         numer += self.p_crp_true
 
-        if self._use_mp:
-            # TODO: abstract out do_marginal calculation
-            args = []
-            if self._fast_niw:
-                for i in range(self._num_procs):
-                    args.append((X, self.data_model.lambda_0, self.data_model.mu_0,
-                                 self.data_model.kappa_0, self.data_model.nu_0, self.crp_alpha,
-                                 self.zs[i], self.ks[i], self.hs[i], self.ns[i]))
-                to_sum = self.pool.map(niwm.niw_mmml_mp, args)
-            else:
-                for i in range(self._num_procs):
-                    args.append((self.data_model, X, self.zs[i], self.ks[i], self.hs[i],
-                                 self.crp_alpha, self.ns[i]))
-
-                sum_parts = self.pool.map(models.mp_log_marginals, args)
-                to_sum = np.zeros(self._num_procs)
-                for i, part in enumerate(sum_parts):
-                    to_sum[i] = logsumexp(part)
-
-            denom = logsumexp(to_sum)
-
+        args = []
+        if self._fast_niw:
+            for i in range(self._num_procs):
+                args.append((X, self.data_model.lambda_0, self.data_model.mu_0,
+                             self.data_model.kappa_0, self.data_model.nu_0, self.crp_alpha,
+                             self.zs[i], self.ks[i], self.hs[i], self.ns[i]))
+            to_sum = mapper(niwm.niw_mmml_mp, args)
         else:
-            if self._fast_niw:
-                denom = niwm.niw_mmml(X, np.copy(self.data_model.lambda_0),
-                                      np.copy(self.data_model.mu_0), float(self.data_model.kappa_0),
-                                      float(self.data_model.nu_0), float(float(self.crp_alpha)),
-                                      np.copy(self.zs[0]), np.copy(self.ks[0]), self.hs[0],
-                                      self.ns[0])
-            else:
-                to_sum = models.do_log_marginals(self.data_model, X, np.copy(self.zs[0]),
-                                                 np.copy(self.ks[0]),  copy.copy(self.hs[0]),
-                                                 self.crp_alpha, self.ns[0])
-                denom = logsumexp(to_sum)
+            for i in range(self._num_procs):
+                args.append((self.data_model, X, copy.copy(self.zs[i]), copy.copy(self.ks[i]),
+                             copy.copy(self.hs[i]), self.crp_alpha, self.ns[i]))
+            sum_parts = mapper(models.mp_log_marginals, args)
+            to_sum = np.zeros(self._num_procs)
+            for i, part in enumerate(sum_parts):
+                to_sum[i] = logsumexp(part)
+
+        denom = logsumexp(to_sum)
 
         return numer-denom
 
@@ -185,7 +172,7 @@ class Teacher(object):
 
             if np.log(np.random.rand()) < logp_prime - self.logp:
                 self.__accept_data(X_prime, logp_prime)
-                # import pdb; pdb.set_trace()
+
             total_iters += 1
             pbar.update(total_iters)
 
@@ -208,16 +195,15 @@ class Teacher(object):
                 pbar.update(total_iters)
 
             self.__collect_data()
-            self.__calibrate_proposal_distribution()
+            # self.__calibrate_proposal_distribution()
 
             if plot_diagnostics and itr > 1:
                 plt.clf()
-                plt.subplot(1,2,1)
+                plt.subplot(1, 2, 1)
                 utils.plot_data_2d(self.data, self.target)
-                plt.subplot(1,2,2)
+                plt.subplot(1, 2, 2)
                 plt.plot(self.logps)
                 plt.draw()
-                # time.sleep(0.05)
 
         pbar.finish()
 
@@ -242,12 +228,21 @@ class Teacher(object):
         return data, Z
 
     def save(self, filename, labels=None):
+        """Dump the main data to a pickle"""
         to_save = {
             'data': self.data,
             'target': self.target,
-            'labels': labels
+            'labels': labels,
+            'X': self.X,
+            'logp': self.logp
         }
         pickle.dump(to_save, open(filename, "wb"))
+
+    def load(self, filename, labels=None):
+        """
+        Load in data and resume from previous state.
+        """
+        raise NotImplementedError
 
     def __accept_data(self, X_prime, logp_prime):
         """
@@ -277,4 +272,4 @@ class Teacher(object):
         """
         Adjust jump standard deviation so that the acceptance rate will stay in an acceptable range.
         """
-        pass
+        raise NotImplementedError
