@@ -3,22 +3,56 @@ from sklearn.cluster import KMeans
 from sklearn import svm
 from sklearn.mixture import GMM
 from sklearn.mixture import VBGMM
-from sklearn.mixture import DPGMM
+# from sklearn.mixture import DPGMM  # this is bad and it should feel bad
 
 import pandas as pd
 from sklearn import metrics
 from math import log
 
+from ids_teach import ids
+from ids_teach import utils
+from ids_teach.dpgmm import DPGMM
+
 import pickle
 import random
+import time
 import sys
+import os
 
+import matplotlib.pyplot as plt
+import seaborn as sns  # never called explictly, but changes pyplot settings
+
+# theses are the algorihtms we evaluate. Note that scikit implmentations of vbgmm and dpgmm
+# need some work, so I do not include them in analyses (I use my own implementation of dpgmm).
 algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'vbgmm', 'dpgmm']
 
 
 def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=None):
     """
-    TODO: docstring
+    Compare the performance of various algorithms on the optimized data and data drawn directly
+    from the target distribution. Measures using ARI (adjusted Rand index), which is the gold
+    standard. Uses the following algorithms:
+
+    1. Multinomial logistic regression (trained on labeled data)
+    2. Support-vector machine with linear kernel (trained on labeled data)
+    3. Support-vector machine with radial basis (RBF) kernel (trained on labeled data)
+    4. k-means (given the correct number of components)
+    5. Gaussian mixture model via Expectation-maximization (given correct number of categories)
+    6. Dirichlet process mixture model (given prior ditribution)
+
+    Inputs:
+        opt_data (list<numpy.ndarray>): A list a data, separated by category (<teacher>.data)
+        target_model (dict): target_model used to generate opt_data
+        data_model (CollapsibleDistribution): data model with prior used by the teacher
+        n_per_cat (list<int>): number of data points to use for training and testing. 
+        n_times (int): number of times over which to average results
+
+    Kwargs:
+        filename (string): If not None (default), saves the results to filename as a pikcle of
+            pandas dataframes.
+
+    Returns:
+        None
     """
     data_model.validate_target_model(target_model)
 
@@ -32,14 +66,18 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=Non
 
     df_output = dict()
 
+    plt.figure(tight_layout=True, facecolor='white')
+    plt.axis([0, 1000, 0, 1])
+    plt.ion()
+    plt.show()
+
     for j, n_per in enumerate(n_per_cat):
         print("Running evaluations for {} examples per category.".format(n_per))
         ari_orig_n = __prep_result_holder(n_times)
         ari_opt_n = __prep_result_holder(n_times)
 
         for i in range(n_times):
-            ari_orig_res, ari_opt_res = eval_all(opt_data, target_model, data_model, n_per)
-            # print("--run {0} or {1} complete".format(i+1, n_times), end=" ")
+            ari_orig_res, ari_opt_res = __eval_all(opt_data, target_model, data_model, n_per)
             for alg in algorithm_list:
                 ari_orig_n[alg][i] = ari_orig_res[alg]
                 ari_opt_n[alg][i] = ari_opt_res[alg]
@@ -68,7 +106,7 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=Non
         pickle.dump(df_output, open(filename, "wb"))
 
 
-def eval_all(opt_data, target_model, data_model, n_per_cat):
+def __eval_all(opt_data, target_model, data_model, n_per_cat):
     """
     Creates datasets and labels and evaluates clustering performance of all algorithms on both the
     data derived from the target model as well as optimized data from a Teacher.
@@ -85,21 +123,39 @@ def eval_all(opt_data, target_model, data_model, n_per_cat):
         aris_opt (dict): each  (key, value) is a algorithm (str) the ARI value achieved by that
             algorithm on a subset of the optimzed data
     """
-    print(".", end=" ")
-    sys.stdout.flush()
     data_train_orig, z_train_orig = __prep_standard_data(target_model, data_model, n_per_cat)
     data_test_orig, z_test_orig = __prep_standard_data(target_model, data_model, n_per_cat)
-    aris_orig = eval_set(data_train_orig, z_train_orig, data_test_orig, z_test_orig)
-
-    print("`", end=" ")
-    sys.stdout.flush()
     data_train_opt, z_train_opt = __prep_optimal_data(opt_data, n_per_cat)
     data_test_opt, z_test_opt = __prep_optimal_data(opt_data, n_per_cat)
-    aris_opt = eval_set(data_train_opt, z_train_opt, data_test_opt, z_test_opt)
+
+    plt.clf()
+    plt.subplot(2, 2, 1)
+    plt.scatter(data_train_orig[:, 0], data_train_orig[:, 1], alpha=.5, color='red')
+    plt.title('Original data (train)')
+
+    plt.subplot(2, 2, 2)
+    plt.scatter(data_train_opt[:, 0], data_train_opt[:, 1], alpha=.5, color='blue')
+    plt.title('Optimal data (train)') 
+
+    plt.subplot(2, 2, 3)
+    plt.scatter(data_test_orig[:, 0], data_test_orig[:, 1], alpha=.5, color='red')
+    plt.title('Original data (test)')
+
+    plt.subplot(2, 2, 4)
+    plt.scatter(data_test_opt[:, 0], data_test_opt[:, 1], alpha=.5, color='blue')
+    plt.title('Optimal data (test)')
+    plt.draw()
+
+    print(".", end=" ")
+    sys.stdout.flush()
+    aris_orig = __eval_set(data_train_orig, z_train_orig, data_test_orig, z_test_orig, data_model)
+    print("`", end=" ")
+    sys.stdout.flush()
+    aris_opt = __eval_set(data_train_opt, z_train_opt, data_test_opt, z_test_opt, data_model)
 
     return aris_orig, aris_opt
 
-def eval_set(train_data, train_labels, test_data, test_labels):
+def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
     """
     Tests the cluster performance of all algorithms on training and testing data sets.
         Note that test data is only used for supervised algorithms, which learn from labeled data.
@@ -118,17 +174,17 @@ def eval_set(train_data, train_labels, test_data, test_labels):
 
     # fixed-categoty algorithms
     K = max(train_labels)+1
-    ari_k_means = eval_kmeans(train_data, train_labels, K)
-    ari_gmm = eval_gmm(train_data, train_labels, K)
+    ari_k_means = __eval_kmeans(train_data, train_labels, K)
+    ari_gmm = __eval_gmm(train_data, train_labels, K)
 
     # variational algorithms
-    ari_vbgmm = eval_vbgmm(train_data, train_labels, alpha=1.0)
-    ari_dpgmm = eval_dpgmm(train_data, train_labels, alpha=1.0)
+    ari_vbgmm = __eval_vbgmm(train_data, train_labels, alpha=1.0)
+    ari_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0)
 
     # labeled-set algorithms
-    ari_logit = eval_logit(train_data, train_labels, test_data, test_labels)
-    ari_svm_linear = eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear')
-    ari_svm_rbf = eval_svm(train_data, train_labels, test_data, test_labels, kernel='rbf')
+    ari_logit = __eval_logit(train_data, train_labels, test_data, test_labels)
+    ari_svm_linear = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear')
+    ari_svm_rbf = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='rbf')
 
     ari = {
         'logit': ari_logit,
@@ -194,7 +250,7 @@ def __prep_optimal_data(opt_data, n_per_category):
 # __________________________________________________________________________________________________
 # Algorithms w/ known number of clusters
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
-def eval_kmeans(data, labels, num_clusters):
+def __eval_kmeans(data, labels, num_clusters):
     """
     Cluster data into num_clusters cluster. Returns a n-length array of cluster assignments.
     """
@@ -205,7 +261,7 @@ def eval_kmeans(data, labels, num_clusters):
     return ari
 
 
-def eval_gmm(data, labels, num_components):
+def __eval_gmm(data, labels, num_components):
     """
     Expectation-maximization with a given number of categories
     """
@@ -219,7 +275,7 @@ def eval_gmm(data, labels, num_components):
 # __________________________________________________________________________________________________
 # Algorithms w/ labeled data
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
-def eval_logit(train_data, train_labels, test_data, test_labels):
+def __eval_logit(train_data, train_labels, test_data, test_labels):
     """
     Multinomial logistic regression. 
     Trained on train_data, tested on test_data. Returns ARI(test_labels, Z)
@@ -231,7 +287,7 @@ def eval_logit(train_data, train_labels, test_data, test_labels):
     return ari
 
 
-def eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'):
+def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'):
     """
     Support-vector machine with user-specified kernel (linear, rbf, etc)
     Trained on train_data, tested on test_data. Returns ARI(test_labels, Z)
@@ -246,7 +302,7 @@ def eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'):
 # __________________________________________________________________________________________________
 # Variational algorithms
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
-def eval_vbgmm(data, labels, alpha=1.0):
+def __eval_vbgmm(data, labels, alpha=1.0):
     """
     Variational inferrence for Gaussian mixture models. Based on dirichlet process.
     Returns ARI(test_labels, Z)
@@ -254,8 +310,9 @@ def eval_vbgmm(data, labels, alpha=1.0):
     # These algorithms must be given a max number of categories, then they choose which categories
     # to keep around. We need to choose high, but if we choose too high, we have to wait froever.
     # I chose n/k because I want to build in a little as possible.
-    k = int(data.shape[0]/float(max(labels)))
-    vbgmm = VBGMM(alpha=alpha, n_iter=100, n_components=k, covariance_type='full')
+    # k = int(data.shape[0]/float(max(labels)))
+    k = 24
+    vbgmm = VBGMM(alpha=alpha, n_iter=10000, n_components=k, covariance_type='full')
     vbgmm.fit(data)
     Z = vbgmm.predict(data)
     ari = metrics.adjusted_rand_score(labels, Z)
@@ -263,15 +320,13 @@ def eval_vbgmm(data, labels, alpha=1.0):
     return ari
 
 
-def eval_dpgmm(data, labels, alpha=1.0):
+def __eval_dpgmm(data, labels, data_model, alpha=1.0):
     """
     Dirichlet proccess EM for Gaussian mixture models. 
     Returns ARI(test_labels, Z)
     """
-    k = int(data.shape[0]/float(max(labels)))
-    dpgmm = DPGMM(alpha=alpha, n_iter=100, n_components=10)
-    dpgmm.fit(data)
-    Z = dpgmm.predict(data)
+    dpgmm = DPGMM(data_model, data, crp_alpha=alpha)
+    Z = dpgmm.fit(n_iter=200)
     ari = metrics.adjusted_rand_score(labels, Z)
     return ari
 
@@ -284,28 +339,36 @@ if __name__ == '__main__':
     from ids_teach.models import NormalInverseWishart
     import numpy as np
 
-    # FIXME: replace w/ actual data when we have it
-    cov_a = np.eye(2)*.4
-    cov_b = np.eye(2)*.4
-    cov_c = np.eye(2)*.4
-    mean_a = np.array([-2.0, 0.0])
-    mean_b = np.array([2.0, 0.0])
-    mean_c = np.array([0.0, 1.6])
+    # # FIXME: replace w/ actual data when we have it
+    # cov_a = np.eye(2)*.1
+    # cov_b = np.eye(2)*.1
+    # cov_c = np.eye(2)*.1
+    # mean_a = np.array([-2.0, 0.0])
+    # mean_b = np.array([2.0, 0.0])
+    # mean_c = np.array([0.0, 1.6])
 
-    target_model = {
-        'd': 2,
-        'parameters': [
-            (mean_a, cov_a),
-            (mean_b, cov_b),
-            (mean_c, cov_c),
-            ],
-        'assignment': np.array([0, 1, 2], dtype=np.dtype(int))
-    }
+    # target_model = {
+    #     'd': 2,
+    #     'parameters': [
+    #         (mean_a, cov_a),
+    #         (mean_b, cov_b),
+    #         (mean_c, cov_c),
+    #         ],
+    #     'assignment': np.array([0, 1, 2], dtype=np.dtype(int))
+    # }
 
+    # n = 500
+    # data_model = NormalInverseWishart.with_vague_prior(target_model)
+    # t = Teacher(target_model, data_model, crp_alpha=1.0, t_std=1, fast_niw=True)
+    # t.mh(n, burn=500, lag=10, plot_diagnostics=False)
+    # data = t.data
+
+    # algcomp(data, target_model, data_model, [10], 10, filename='alcomp_test_b.pkl')
+
+
+    target_model, labels = ids.gen_model()
     data_model = NormalInverseWishart.with_vague_prior(target_model)
+    dirname = os.path.join('../data', 'longrunmatlab')
+    data = utils.matlab_csv_to_teacher_data(dirname)
 
-    n = 500
-    t = Teacher(target_model, data_model, crp_alpha=1.0, t_std=1, fast_niw=True)
-    t.mh(n, burn=500, lag=10, plot_diagnostics=False)
-
-    algcomp(t.data, target_model, data_model, [10, 25, 50, 100], 100, filename='alcomp_test.pkl')
+    algcomp(data, target_model, data_model, [10, 25, 50, 100], 100, filename='alcomp_test.pkl')

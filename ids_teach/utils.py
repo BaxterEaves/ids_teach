@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 
@@ -5,9 +6,11 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse
 import seaborn as sns  # never called explictly, but changes pyplot settings
 
+from scipy.misc import logsumexp
 from scipy.special import multigammaln
 from numpy.linalg import slogdet
 from numpy.linalg import solve
+from random import shuffle
 from scipy import linalg
 from numpy import trace
 from math import log
@@ -17,7 +20,7 @@ ITERATIONS = 1000
 
 def dist(a, b):
     """
-    Distance between two numpy arrays
+    Euclidian distance between two numpy arrays
 
     Example:
         >>> import numpy as np
@@ -117,6 +120,22 @@ def what_do_you_think_about_the_stars_in_the_sky():
         \r░░░░░░░▐██░░░░░░░░░░░░██▌░░░░░░░\n░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
     print(that_was_an_interesting_response)
 
+def matlab_csv_to_teacher_data(dirname):
+    """
+    Utility to convert data from the old matlab code to something the new hotness (this code) can
+    use.
+    """
+    samples = np.genfromtxt(os.path.join(dirname, 'samples.csv'), dtype=float, delimiter=",")
+    labels = np.genfromtxt(os.path.join(dirname, 'labels.csv'), dtype=int, delimiter=",")
+    data = [None]*max(labels)  # matlab is 1-indexed, so no need to add 1
+    for i, z in enumerate(labels):
+        if data[z-1] is None:
+            data[z-1] = np.copy(samples[i, :])
+        else:
+            data[z-1] = np.vstack((data[z-1], np.copy(samples[i, :])))
+    return data
+
+
 
 def bell_number(n):
     """
@@ -131,6 +150,10 @@ def bell_number(n):
 
 
 def next_partition(Z, k, h):
+    """
+    Generates the next partition, Z, and histogram, h given the curerent partition and histogram
+    given the pseudo counts, k. This function will mutate Z, k, and h.
+    """
     n = len(Z)
     for i in range(n-1, 0, -1):
         if(Z[i] <= k[i-1]):
@@ -184,6 +207,88 @@ def parition_generator(n):
     while next_partition(Z, k, h) is not None:
         yield(Z)
 
+
+def pflip(P):
+    """
+    Multinomial draw from a vector P of probabilities
+    """
+    if len(P) == 1:
+        return 0
+
+    P /= sum(P)
+
+    assert math.fabs(1.0-sum(P)) < 10.0**(-10.0)
+
+    p_minus = 0
+    r = np.random.rand()
+    for i in range(len(P)):
+        P[i] += p_minus
+        p_minus = P[i]
+        if r < p_minus:
+            return i
+
+    raise IndexError("pflip:failed to find index")
+
+
+def lpflip(P):
+    """
+    Multinomial draw from a vector P of log probabilities
+    """
+    if len(P) == 1:
+        return 0
+
+    Z = logsumexp(P)
+    P -= Z
+
+    NP = np.exp(np.copy(P))
+
+    assert math.fabs(1.0-sum(NP)) < 10.0**(-10.0)
+
+    return pflip(NP)
+
+
+def crp_gen(N, alpha):
+    """
+    Generates a random, N-length partition from the CRP with parameter alpha
+    """
+    assert N > 0
+    assert alpha > 0.0
+    alpha = float(alpha)
+
+    partition = np.zeros(N, dtype=int)
+    Nk = [1]
+    for i in range(1, N):
+        K = len(Nk)
+        ps = np.zeros(K+1)
+        for k in range(K):
+            # get the number of people sitting at table k
+            ps[k] = float(Nk[k])
+
+        ps[K] = alpha
+
+        ps /= (float(i)-1+alpha)
+
+        assignment = pflip(ps)
+
+        if assignment == K:
+            Nk.append(1)
+        elif assignment < K:
+            Nk[assignment] += 1
+        else:
+            raise ValueError("invalid assignment: %i, max=%i" % (assignment, K))
+
+        partition[i] = assignment
+
+    assert max(partition)+1 == len(Nk)
+    assert len(partition) == N
+    assert sum(Nk) == N
+
+    K = len(Nk)
+
+    if K > 1:
+        shuffle(partition)
+
+    return np.array(partition), Nk, K
 
 # _________________________________________________________________________________________________
 # Plot utils
