@@ -1,3 +1,20 @@
+// IDSTeach: Generate data to teach continuous categorical data.
+// Copyright (C) 2015  Baxter S. Eaves Jr.
+
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 #include <armadillo>
 #include <cmath>
 
@@ -64,22 +81,34 @@ int main(){
     //=============================================================================================
     double logp, Z_0;
     Z_0 = calc_log_z(L0_generic, K0_generic, V0_generic);
-    logp = lgniwml_arma(X_single, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
+    logp = lgniwml(X_single, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
     std::cout << "generic marginal (single), should be " << -5.5861321608291
               << ", is " << logp << std::endl;
 
-    logp = lgniwml_arma(X_multi, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
+    logp = lgniwml(X_multi, M0_generic, L0_generic, K0_generic, V0_generic, Z_0);
     std::cout << "generic marginal (mulit), should be " << -16.3923777220275
               << ", is " << logp << std::endl;
 
 
     Z_0 = calc_log_z(L0_random, K0_random, V0_random);
-    logp = lgniwml_arma(X_single, M0_random, L0_random, K0_random, V0_random, Z_0);
+    logp = lgniwml(X_single, M0_random, L0_random, K0_random, V0_random, Z_0);
     std::cout << "random marginal (single), should be " << -6.60964751885643
               << ", is " << logp << std::endl;
 
-    logp = lgniwml_arma(X_multi, M0_random, L0_random, K0_random, V0_random, Z_0);
+    logp = lgniwml(X_multi, M0_random, L0_random, K0_random, V0_random, Z_0);
     std::cout << "random marginal (mulit), should be " << -19.5739755706395
               << ", is " << logp << std::endl;
+
+    //=============================================================================================
+    logp = lgniwpp(X_single, X_multi, M0_random, L0_random, K0_random, V0_random);
+    std::cout << "lgniwpp (single, mulit), should be " << -3.25801708275319
+             << ", is " << logp << std::endl;
+
+    //=============================================================================================
+    std::cout << "Fetching rows 1 and 3 of ";
+    X_multi.print("this");
+    auto X_fetched = fetch_rows(X_multi, {1, 3});
+    X_fetched.print("gives this:");
+
 
 }

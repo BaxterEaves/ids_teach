@@ -1,10 +1,17 @@
-# Python requirements for IDS python code
-cython==0.21.2
-scipy==0.15.0
-numpy==1.9.1
-matplotlib==1.4.2
-seaborn==0.5.1
-scikit-learn==0.15.1
-pandas==0.15.2
+# # Python requirements for IDS python code
+# # These are the versions used during development
+# scipy==0.15.0
+# numpy==1.9.1
+# matplotlib==1.4.2
+# seaborn==0.5.1
+# scikit-learn==0.15.1
+# pandas==0.15.2
+
+scipy
+numpy
+matplotlib
+seaborn
+scikit-learn
+pandas
 pytest
 progressbar33

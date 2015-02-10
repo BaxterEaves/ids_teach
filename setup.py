@@ -1,27 +1,63 @@
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 from setuptools import setup
-from distutils.core import setup, Extension
-from Cython.Distutils import build_ext
+from setuptools import find_packages
+from distutils.core import Extension
 from pip.req import parse_requirements
 
+import os
+
+cmdclass = dict()
+
+USE_CYTHON = os.environ.get('USE_CYTHON', False)
+if USE_CYTHON:
+    from Cython.Build import cythonize
+    from Cython.Distutils import build_ext
+    cmdclass['build_ext'] = build_ext
+    print('Using cython.')
+    ext = '.pyx'
+else:
+    print('Using pre-built cython files.')
+    ext = '.cpp'
+
+extensions = [Extension("idsteach.fastniw", 
+                        sources=["idsteach/fastniw"+ext, "src/dpgmm.cpp"],
+                        libraries=['armadillo'],
+                        extra_compile_args=['-std=c++11','-DNIDSDEBUG', '-DARMA_NO_DEBUG'],
+                        include_dirs=['src'],
+                        language="c++")
+                    ]
+
+if USE_CYTHON:
+    extensions = cythonize(extensions)
 
 install_reqs = parse_requirements('requirements.txt')
 reqs = [str(ir.req) for ir in install_reqs]
 
-niw_ext = Extension("ids_teach.niw_module", 
-                    sources=["ids_teach/cppext/niw_module.pyx"],
-                    extra_compile_args=['-std=c++11'],
-                    extra_link_args=['-O2', '-larmadillo'],
-                    include_dirs=['cpp'],
-                    language="c++")
-
 setup(
-    name='IDS teach',
-    version='0.1',
+    name='idsteach',
+    version='0.1.0-dev',
     author='Baxter S. Eaves Jr.',
     url='TBA',
     long_description='TBA.',
     install_requires=reqs,
-    package_dir={'ids_teach':'ids_teach/'},
-    ext_modules=[niw_ext],
-    cmdclass={'build_ext': build_ext},
+    package_dir={'idsteach':'idsteach/'},
+    packages=find_packages(exclude=['testdpgmm.py']),
+    ext_modules=extensions,
+    cmdclass=cmdclass
 )

@@ -1,15 +1,34 @@
-from ids_teach import utils
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+from idsteach import utils
 from scipy.misc import comb as nchoosek
 
 import itertools as it
 import numpy as np
 import matplotlib.pyplot as plt
+import mpl_toolkits.mplot3d.axes3d as plt3
 import seaborn as sns
+
+import copy
 
 sns.set_palette("gray")
 
 # _________________________________________________________________________________________________
-# Data taken from hillenbrand
+# Data taken from hillenbrand (F1 and F2)
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 all_the_vowels = ['AE', 'AH', 'AW', 'EH', 'EI', 'ER', 'IH', 'IY', 'OA', 'OO', 'UH', 'UW']
 corner_vowels = ['AH', 'IY', 'UW']  # FIXME: check this
@@ -187,7 +206,42 @@ hillenbrand_data = {
 # _________________________________________________________________________________________________
 # Data prep
 # `````````````````````````````````````````````````````````````````````````````````````````````````
-def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False):
+def full_hillenbrand_to_dict(filename='hillenbrand.csv'):
+    """ pulls and preps data for all 3 formants """
+    csvdata = np.genfromtxt(filename, delimiter=',', skip_header=1, dtype=str)
+    data_out = copy.copy(hillenbrand_data)
+    for key in data_out.keys():
+        data_out[key]['data'] = None
+
+    for row in range(csvdata.shape[0]):
+        key = csvdata[row, 0].upper()
+        formants = np.array(csvdata[row, 1:], dtype=np.dtype(float))
+        if not np.any(formants==0):
+            if data_out[key]['data'] is None:
+                data_out[key]['data'] = formants
+            else:
+                data_out[key]['data'] = np.vstack((data_out[key]['data'], formants))
+
+    fig = plt.figure()
+    ax = plt3.Axes3D(fig)
+    for i, key in enumerate(data_out.keys()):
+        data_i = data_out[key]['data']
+        if i == 0:
+            data = data_i
+            colors = np.array([i/12.0]*data_i.shape[0], dtype=float)
+        else:
+            data = np.vstack((data, data_i))
+            colors = np.append(colors, np.array([i/12.0]*data_i.shape[0], dtype=float))
+
+    # ax.scatter(data[:,0], data[:,1], data[:,2], c=colors, cmap='jet')
+    # plt.xlabel('F1')
+    # plt.ylabel('F2')
+    # # plt.zlabel('F3')
+    # plt.show()
+    return data_out
+
+
+def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
     '''
     Generates a Teacher-ready model from the Hillenbrand data.
 
@@ -197,6 +251,8 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False):
         n_per_phoneme (int): number of datapoints per phoneme. Defaults to 1.
         erb (bool): If True, converts the Hillenbrand data from Hz to ERB. The resulting model will
             be in ERB space.
+        f3 (bool): If True, generates data using the third formant as well. Not that beacuse there
+            are 0 values in some of the F3 data that there will be fewer data point per phoneme.
 
     Returns:
         model (dict): model has two keys: "parameters" and "assignment". "parameters" is a list with
@@ -224,10 +280,15 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False):
     if not which_phonemes:
         which_phonemes = all_the_vowels
 
+    if not f3:
+        input_data = hillenbrand_data[phoneme]['data']
+    else:
+        input_data = full_hillenbrand_to_dict()
+
     parameters = []
     assignment = []
     for k, phoneme in enumerate(which_phonemes):
-        formants = hillenbrand_data[phoneme]['data']
+        formants = input_data[phoneme]['data']
         X = utils.hz_to_erb(formants) if erb else formants
 
         sigma = np.cov(X.T)

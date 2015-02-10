@@ -1,8 +1,25 @@
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 import unittest
 
 import numpy as np
 
-from ids_teach.models import NormalInverseWishart as NIW
+from idsteach.models import NormalInverseWishart as NIW
 
 
 class TestNormalInverseWishartValues(unittest.TestCase):
@@ -53,6 +70,10 @@ class TestNormalInverseWishartValues(unittest.TestCase):
 
         self.assertAlmostEqual(logpdf_s, -8.50344504031352)
         self.assertAlmostEqual(logpdf_m, -23.6468667799676)
+
+    def test_predictive_probability(self):
+        logp = self.random_niw.log_posterior_predictive(self.singledata, self.multidata)
+        self.assertAlmostEqual(-3.25801708275319, logp)
 
 if __name__ == '__main__':
     unittest.main()

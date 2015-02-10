@@ -1,3 +1,20 @@
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 import os
 import math
 import numpy as np
@@ -8,6 +25,7 @@ import seaborn as sns  # never called explictly, but changes pyplot settings
 
 from scipy.misc import logsumexp
 from scipy.special import multigammaln
+from scipy.special import gammaln
 from numpy.linalg import slogdet
 from numpy.linalg import solve
 from random import shuffle
@@ -136,6 +154,30 @@ def matlab_csv_to_teacher_data(dirname):
     return data
 
 
+def multiple_matlab_csv_to_teacher_data(short_runs_dirname):
+    """
+    Utility to convert data from the old matlab code to something the new hotness (this code) can
+    use.
+    """
+    subdirname = 'Run-'
+    data = None
+    data_length = 0
+    for i in range(10):
+        dirname = os.path.join(short_runs_dirname, subdirname+str(i+1))
+        run_data = matlab_csv_to_teacher_data(dirname)
+        if i == 0:
+            data = run_data
+        else:
+            for i, phoneme_data in enumerate(run_data):
+                data[i] = np.vstack((data[i], phoneme_data))
+
+        data_length += run_data[0].shape[0]
+
+    for i, phoneme_data in enumerate(data):
+        assert phoneme_data.shape[0] == data_length, "Data was imporperly constructed."
+
+    return data
+
 
 def bell_number(n):
     """
@@ -228,6 +270,17 @@ def pflip(P):
             return i
 
     raise IndexError("pflip:failed to find index")
+
+
+def lcrp(N, Nk, alpha):
+    """
+    Returns the log probability under crp of the count vector Nk given
+    concentration parameter alpha. N is the total number of entries
+    """
+    N = float(N)
+    k = float(len(Nk))  # number of classes
+    l = np.sum(gammaln(Nk))+k*log(alpha)+gammaln(alpha)-gammaln(N+alpha)
+    return l
 
 
 def lpflip(P):

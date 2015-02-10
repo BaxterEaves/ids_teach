@@ -1,17 +1,36 @@
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.cluster import KMeans
 from sklearn import svm
 from sklearn.mixture import GMM
 from sklearn.mixture import VBGMM
-# from sklearn.mixture import DPGMM  # this is bad and it should feel bad
-
-import pandas as pd
+from sklearn.mixture import DPGMM as DPGMM_sk
 from sklearn import metrics
 from math import log
+import multiprocessing as mp
+from idsteach import ids
+from idsteach import utils
 
-from ids_teach import ids
-from ids_teach import utils
-from ids_teach.dpgmm import DPGMM
+from idsteach.dpgmm import DPGMM
+from idsteach.fastniw import PyDPGMM
+
+import pandas as pd
+import numpy as np
 
 import pickle
 import random
@@ -24,10 +43,11 @@ import seaborn as sns  # never called explictly, but changes pyplot settings
 
 # theses are the algorihtms we evaluate. Note that scikit implmentations of vbgmm and dpgmm
 # need some work, so I do not include them in analyses (I use my own implementation of dpgmm).
-algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'vbgmm', 'dpgmm']
+# algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'vbgmm', 'dpgmm']
+algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'dpgmm']
 
 
-def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=None):
+def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None, do_plot=False):
     """
     Compare the performance of various algorithms on the optimized data and data drawn directly
     from the target distribution. Measures using ARI (adjusted Rand index), which is the gold
@@ -45,11 +65,13 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=Non
         target_model (dict): target_model used to generate opt_data
         data_model (CollapsibleDistribution): data model with prior used by the teacher
         n_per_cat (list<int>): number of data points to use for training and testing. 
-        n_times (int): number of times over which to average results
+        n_runs (int): number of times over which to average results
 
     Kwargs:
         filename (string): If not None (default), saves the results to filename as a pikcle of
             pandas dataframes.
+        do_plot (bool): do plotting? I should probably remove this because plotting from withing
+            multiprocessing is going to break everything.
 
     Returns:
         None
@@ -64,23 +86,34 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=Non
     ari_opt_mean = __prep_result_holder(len(n_per_cat))
     ari_opt_std = __prep_result_holder(len(n_per_cat))
 
-    df_output = dict()
+    data_output = dict()
 
-    plt.figure(tight_layout=True, facecolor='white')
-    plt.axis([0, 1000, 0, 1])
-    plt.ion()
-    plt.show()
+    if do_plot:
+        plt.figure(tight_layout=True, facecolor='white')
+        plt.axis([0, 1000, 0, 1])
+        plt.ion()
+        plt.show()
 
     for j, n_per in enumerate(n_per_cat):
-        print("Running evaluations for {} examples per category.".format(n_per))
-        ari_orig_n = __prep_result_holder(n_times)
-        ari_opt_n = __prep_result_holder(n_times)
+        print("Running evaluations for {0} examples per category for {1} runs.".format(n_per, n_runs))
+        data_output[n_per] = dict()
+        ari_orig_n = __prep_result_holder(n_runs)
+        ari_opt_n = __prep_result_holder(n_runs)
 
-        for i in range(n_times):
-            ari_orig_res, ari_opt_res = __eval_all(opt_data, target_model, data_model, n_per)
+        # construct args. seed the rng for each processor. I was having trouble with the numpy rng
+        # using the same seed across cores.
+        args = []
+        for _ in range(n_runs):
+            args.append((opt_data, target_model, data_model, n_per, np.random.randint(0, 2**32-1)))
+
+        pool = mp.Pool()
+        pool.daemon = True
+        res = pool.map(__eval_all_mp, args)
+        for i, (ari_orig_res, ari_opt_res) in enumerate(res):
             for alg in algorithm_list:
                 ari_orig_n[alg][i] = ari_orig_res[alg]
                 ari_opt_n[alg][i] = ari_opt_res[alg]
+
         print(' ')
 
         for alg in algorithm_list:
@@ -98,15 +131,22 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_times, filename=Non
             table_data[row, 3] = ari_opt_std[alg][j]
 
         df = pd.DataFrame(table_data, index=keys, columns=columns)
-        df_output[n_per] = df
-        # print(df.to_latex())
+        data_output[n_per]['dataframe'] = df
+        data_output[n_per]['ari_optimal'] = ari_opt_n
+        data_output[n_per]['ari_original'] = ari_orig_n
+
         print(df)
 
     if filename is not None:
-        pickle.dump(df_output, open(filename, "wb"))
+        pickle.dump(data_output, open(filename, "wb"))
 
 
-def __eval_all(opt_data, target_model, data_model, n_per_cat):
+def __eval_all_mp(args):
+    np.random.seed(args[-1])
+    return __eval_all(*args[:-1])
+
+
+def __eval_all(opt_data, target_model, data_model, n_per_cat, do_plot=False):
     """
     Creates datasets and labels and evaluates clustering performance of all algorithms on both the
     data derived from the target model as well as optimized data from a Teacher.
@@ -128,23 +168,24 @@ def __eval_all(opt_data, target_model, data_model, n_per_cat):
     data_train_opt, z_train_opt = __prep_optimal_data(opt_data, n_per_cat)
     data_test_opt, z_test_opt = __prep_optimal_data(opt_data, n_per_cat)
 
-    plt.clf()
-    plt.subplot(2, 2, 1)
-    plt.scatter(data_train_orig[:, 0], data_train_orig[:, 1], alpha=.5, color='red')
-    plt.title('Original data (train)')
+    if do_plot:
+        plt.clf()
+        plt.subplot(2, 2, 1)
+        plt.scatter(data_train_orig[:, 0], data_train_orig[:, 1], alpha=.5, color='red')
+        plt.title('Original data (train)')
 
-    plt.subplot(2, 2, 2)
-    plt.scatter(data_train_opt[:, 0], data_train_opt[:, 1], alpha=.5, color='blue')
-    plt.title('Optimal data (train)') 
+        plt.subplot(2, 2, 2)
+        plt.scatter(data_train_opt[:, 0], data_train_opt[:, 1], alpha=.5, color='blue')
+        plt.title('Optimal data (train)') 
 
-    plt.subplot(2, 2, 3)
-    plt.scatter(data_test_orig[:, 0], data_test_orig[:, 1], alpha=.5, color='red')
-    plt.title('Original data (test)')
+        plt.subplot(2, 2, 3)
+        plt.scatter(data_test_orig[:, 0], data_test_orig[:, 1], alpha=.5, color='red')
+        plt.title('Original data (test)')
 
-    plt.subplot(2, 2, 4)
-    plt.scatter(data_test_opt[:, 0], data_test_opt[:, 1], alpha=.5, color='blue')
-    plt.title('Optimal data (test)')
-    plt.draw()
+        plt.subplot(2, 2, 4)
+        plt.scatter(data_test_opt[:, 0], data_test_opt[:, 1], alpha=.5, color='blue')
+        plt.title('Optimal data (test)')
+        plt.draw()
 
     print(".", end=" ")
     sys.stdout.flush()
@@ -178,7 +219,7 @@ def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
     ari_gmm = __eval_gmm(train_data, train_labels, K)
 
     # variational algorithms
-    ari_vbgmm = __eval_vbgmm(train_data, train_labels, alpha=1.0)
+    # ari_vbgmm = __eval_vbgmm(train_data, train_labels, alpha=1.0)
     ari_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0)
 
     # labeled-set algorithms
@@ -192,7 +233,7 @@ def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
         'svm_rbf': ari_svm_rbf,
         'k_means': ari_k_means,
         'gmm': ari_gmm,
-        'vbgmm': ari_vbgmm,
+        # 'vbgmm': ari_vbgmm,
         'dpgmm': ari_dpgmm,
     }
 
@@ -246,6 +287,7 @@ def __prep_optimal_data(opt_data, n_per_category):
         data = X[rows] if i == 0 else np.vstack((data, X[rows]))
         Z += [i]*n_per_category
     return data, Z
+
 
 # __________________________________________________________________________________________________
 # Algorithms w/ known number of clusters
@@ -301,15 +343,15 @@ def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'
 
 # __________________________________________________________________________________________________
 # Variational algorithms
+# These algorithms must be given a max number of categories, then they choose which categories
+# to keep around. We need to choose high, but if we choose too high, we have to wait froever.
+# I chose n/k because I want to build in a little as possible.
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
 def __eval_vbgmm(data, labels, alpha=1.0):
     """
     Variational inferrence for Gaussian mixture models. Based on dirichlet process.
     Returns ARI(test_labels, Z)
     """
-    # These algorithms must be given a max number of categories, then they choose which categories
-    # to keep around. We need to choose high, but if we choose too high, we have to wait froever.
-    # I chose n/k because I want to build in a little as possible.
     # k = int(data.shape[0]/float(max(labels)))
     k = 24
     vbgmm = VBGMM(alpha=alpha, n_iter=10000, n_components=k, covariance_type='full')
@@ -325,50 +367,105 @@ def __eval_dpgmm(data, labels, data_model, alpha=1.0):
     Dirichlet proccess EM for Gaussian mixture models. 
     Returns ARI(test_labels, Z)
     """
-    dpgmm = DPGMM(data_model, data, crp_alpha=alpha)
-    Z = dpgmm.fit(n_iter=200)
+    dpgmm = PyDPGMM(data_model, data, crp_alpha=alpha, init_mode='single_cluster')
+    Z = dpgmm.fit(n_iter=200, sm_prop=.25, sm_burn=50, num_sm_sweeps=2)
+    # dpgmm = DPGMM(data_model, data, crp_alpha=alpha, init_mode='single_cluster')
+    # Z = dpgmm.fit(n_iter=200, sm_prop=.8, sm_burn=10)
     ari = metrics.adjusted_rand_score(labels, Z)
     return ari
 
+# def __eval_dpgmm(data, labels, data_model, alpha=1.0):
+#     """
+#     Dirichlet proccess EM for Gaussian mixture models. 
+#     Returns ARI(test_labels, Z)
+#     """
+#     data_cpy = np.copy(data)
+#     data_cpy -= np.mean(data_cpy, axis=0)
+#     data_cpy /= np.max(data_cpy)
+#     dpgmm = DPGMM_sk(n_components=min(20, data_cpy.shape[0]), alpha=1.0,  n_iter=10000)
+#     dpgmm.fit(data_cpy)
+#     Z = dpgmm.predict(data_cpy)
+#     ari = metrics.adjusted_rand_score(labels, Z)
+#     return ari
+
+
+def plot_result(filename, type='kde'):
+    data = pickle.load(open(filename, 'rb'))
+    N = [key for key in data.keys()]
+    N = sorted(N)
+    
+    n_sbplts_x = 3
+    n_sbplts_y = 2
+
+    def get_clip(x):
+        s = np.std(x)
+        m = np.mean(x)
+        return [m-4.0*s, m+4.0*s]
+
+    for i, n in enumerate(N):
+        # f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, sharex=True, sharey=True, figsize=(4, 8))
+        f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, figsize=(12, 6))
+        f.set_facecolor('white')
+        c1, c2, c3 = sns.color_palette("Set1", 3)
+
+        for j, alg in enumerate(algorithm_list):
+            ari_orig = data[n]['ari_original'][alg]
+            ari_opt = data[n]['ari_optimal'][alg]
+
+            if type == 'kde':
+                clip_orig = get_clip(ari_orig)
+                clip_opt = get_clip(ari_opt)
+
+                # sns.kdeplot(ari_orig, shade=True, color=c1, ax=axes.flat[j], clip=clip_orig, label='original')
+                # sns.kdeplot(ari_opt, shade=True, color=c2, ax=axes.flat[j], clip=clip_opt, label='optimal')
+                sns.distplot(ari_orig, color=c1, ax=axes.flat[j], 
+                    kde_kws=dict(clip=clip_orig, label='original', lw=3),
+                    hist_kws=dict(histtype="stepfilled"))
+                sns.distplot(ari_opt, color=c2, ax=axes.flat[j],
+                    kde_kws=dict(clip=clip_opt, label='optimized', lw=3),
+                    hist_kws=dict(histtype="stepfilled"))
+
+                axes.flat[j].set_xlabel('ARI')
+                axes.flat[j].set_ylabel('Density')
+            elif type == 'violin':
+                sns.violinplot([ari_orig, ari_opt], positions=[1, 2], ax=axes.flat[j],
+                    names=['original','optimized'], alpha=.5)
+
+                axes.flat[j].set_ylabel('ARI')
+
+            axes.flat[j].set_title(alg.upper())
+
+        plt.show()
 
 # _________________________________________________________________________________________________
 # Entry point
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
-    from ids_teach.teacher import Teacher
-    from ids_teach.models import NormalInverseWishart
+    # TODO: argparse
+    import argparse
+    from idsteach.teacher import Teacher
+    from idsteach.models import NormalInverseWishart
     import numpy as np
 
-    # # FIXME: replace w/ actual data when we have it
-    # cov_a = np.eye(2)*.1
-    # cov_b = np.eye(2)*.1
-    # cov_c = np.eye(2)*.1
-    # mean_a = np.array([-2.0, 0.0])
-    # mean_b = np.array([2.0, 0.0])
-    # mean_c = np.array([0.0, 1.6])
+    parser = argparse.ArgumentParser(description='Run examples')
+    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+',help='list of number of exampler per phoneme')
+    parser.add_argument('--num_runs', type=int, default=100, help='Number of runs to average over.')
+    parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default) or 'violin'")
+    parser.add_argument('--filename', type=str, default='alcomptest.pkl', help='save as filename')
+    parser.add_argument('--multirun', action='store_true', default=False, help='use data from multiple sampler chains')
 
-    # target_model = {
-    #     'd': 2,
-    #     'parameters': [
-    #         (mean_a, cov_a),
-    #         (mean_b, cov_b),
-    #         (mean_c, cov_c),
-    #         ],
-    #     'assignment': np.array([0, 1, 2], dtype=np.dtype(int))
-    # }
-
-    # n = 500
-    # data_model = NormalInverseWishart.with_vague_prior(target_model)
-    # t = Teacher(target_model, data_model, crp_alpha=1.0, t_std=1, fast_niw=True)
-    # t.mh(n, burn=500, lag=10, plot_diagnostics=False)
-    # data = t.data
-
-    # algcomp(data, target_model, data_model, [10], 10, filename='alcomp_test_b.pkl')
-
+    args = parser.parse_args()
 
     target_model, labels = ids.gen_model()
     data_model = NormalInverseWishart.with_vague_prior(target_model)
-    dirname = os.path.join('../data', 'longrunmatlab')
-    data = utils.matlab_csv_to_teacher_data(dirname)
+    if args.multirun:
+        dirname = '../data'
+        data = utils.multiple_matlab_csv_to_teacher_data(dirname)
+    else:
+        dirname = os.path.join('../data', 'lrunml')
+        data = utils.matlab_csv_to_teacher_data(dirname)
 
-    algcomp(data, target_model, data_model, [10, 25, 50, 100], 100, filename='alcomp_test.pkl')
+    
+    # algcomp(data, target_model, data_model, [50], 500, filename=filename)
+    algcomp(data, target_model, data_model, args.num_examples, args.num_runs, filename=args.filename)
+    plot_result(args.filename, args.plot_type)

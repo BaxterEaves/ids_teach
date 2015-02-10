@@ -22,11 +22,7 @@ To use this code in the future you need only type the following command
 $ workon ids
 ```
 ### Requirements (OSX)
-<!-- For the python parts, run
 
-```bash
-$ pip install -r requirements.txt
-``` -->
 For the C++ parts you will need the [Armadillo linear algebra libraryy](http://arma.sourceforge.net/download.html). You can install it with [homebrew](http://brew.sh/). 
 
 **Note**: Homebrew installs are not specific to the virtual environment. If you have a version of armadillo installed (you would know if you did), this will create a symbolic link that may break compile processes for other code you have.
@@ -39,7 +35,7 @@ $ brew install armadillo
 ### Install (may require `sudo`).
 From inside the virtual environment navigate to the main directory (the directory with this readme)
 ```bash
-(ids)$ pip install .
+(ids)$ python setup.py install
 ```
 You should be good-to-go now.
 

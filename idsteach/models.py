@@ -1,7 +1,24 @@
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
 import numpy as np
 
-from ids_teach import niw_module as niwm
-from ids_teach import utils
+from idsteach import fastniw as fniw
+from idsteach import utils
 
 from scipy.special import multigammaln
 from scipy.special import gammaln
@@ -145,7 +162,7 @@ class NormalInverseWishart(CollapsibleDistribution):
         mu_0 /= float(len(target_model['parameters']))
         lambda_0 /= float(len(target_model['parameters']))
         kappa_0 = 1.0
-        nu_0 = 3.0
+        nu_0 = float(len(mu_0)) + 1  # d+1
 
         prior_hyperparameters = {
             'mu_0': mu_0,
@@ -202,7 +219,7 @@ class NormalInverseWishart(CollapsibleDistribution):
         # log_z_n = self.calc_log_z(*params_n)
 
         # return log_z_n - self.log_z - LOG2PI*(n*self.d/2)
-        return niwm.niw_ml(X, self.lambda_0, self.mu_0, self.kappa_0, self.nu_0, self.log_z)
+        return fniw.niw_ml(X, self.lambda_0, self.mu_0, self.kappa_0, self.nu_0, self.log_z)
 
     def log_posterior_predictive(self, Y, X):
         # n = X.shape[0]
@@ -215,7 +232,7 @@ class NormalInverseWishart(CollapsibleDistribution):
         # log_z_m = self.calc_log_z(*params_m)
 
         # return log_z_m - log_z_n - LOG2PI*(self.d/2)
-        return niwm.niw_pp(Y, X, self.lambda_0, self.mu_0, self.kappa_0, self.nu_0)
+        return fniw.niw_pp(Y, X, self.lambda_0, self.mu_0, self.kappa_0, self.nu_0)
 
     def draw_data_from_prior(self, n):
         return np.random.multivariate_normal(self.mu_0, self.lambda_0/self.kappa_0, n)

@@ -1,13 +1,29 @@
+# IDSTeach: Generate data to teach continuous categorical data.
+# Copyright (C) 2015  Baxter S. Eaves Jr.
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 import numpy as np
 import multiprocessing as mp
 
-from ids_teach import utils
-from ids_teach import models
+from idsteach import utils
+from idsteach import models
 import pickle
 import copy
 import time
 
-from ids_teach.cppext import niw_module as niwm
+from idsteach import fastniw as fniw
 from progressbar import ProgressBar
 from progressbar import ETA
 from progressbar import RotatingMarker
@@ -143,7 +159,7 @@ class Teacher(object):
                 args.append((X, self.data_model.lambda_0, self.data_model.mu_0,
                              self.data_model.kappa_0, self.data_model.nu_0, self.crp_alpha,
                              self.zs[i], self.ks[i], self.hs[i], self.ns[i]))
-            to_sum = mapper(niwm.niw_mmml_mp, args)
+            to_sum = mapper(fniw.niw_mmml_mp, args)
         else:
             for i in range(self._num_procs):
                 args.append((self.data_model, X, copy.copy(self.zs[i]), copy.copy(self.ks[i]),
