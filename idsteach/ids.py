@@ -222,8 +222,6 @@ def full_hillenbrand_to_dict(filename='hillenbrand.csv'):
             else:
                 data_out[key]['data'] = np.vstack((data_out[key]['data'], formants))
 
-    fig = plt.figure()
-    ax = plt3.Axes3D(fig)
     for i, key in enumerate(data_out.keys()):
         data_i = data_out[key]['data']
         if i == 0:
@@ -233,11 +231,6 @@ def full_hillenbrand_to_dict(filename='hillenbrand.csv'):
             data = np.vstack((data, data_i))
             colors = np.append(colors, np.array([i/12.0]*data_i.shape[0], dtype=float))
 
-    # ax.scatter(data[:,0], data[:,1], data[:,2], c=colors, cmap='jet')
-    # plt.xlabel('F1')
-    # plt.ylabel('F2')
-    # # plt.zlabel('F3')
-    # plt.show()
     return data_out
 
 
@@ -281,7 +274,7 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
         which_phonemes = all_the_vowels
 
     if not f3:
-        input_data = hillenbrand_data[phoneme]['data']
+        input_data = hillenbrand_data
     else:
         input_data = full_hillenbrand_to_dict()
 
@@ -303,6 +296,10 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
         'assignment': np.array(assignment, dtype=np.dtype(int)),
         'd': 2
     }
+
+    if f3:
+        model['d'] = 3
+
     return model, which_phonemes
 
 

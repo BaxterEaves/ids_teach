@@ -389,7 +389,7 @@ def __eval_dpgmm(data, labels, data_model, alpha=1.0):
 #     return ari
 
 
-def plot_result(filename, type='kde'):
+def plot_result(filename, type='kde', suptitle=None):
     data = pickle.load(open(filename, 'rb'))
     N = [key for key in data.keys()]
     N = sorted(N)
@@ -434,6 +434,9 @@ def plot_result(filename, type='kde'):
                 axes.flat[j].set_ylabel('ARI')
 
             axes.flat[j].set_title(alg.upper())
+
+        if suptitle is not None:
+            plt.suptitle(suptitle)
 
         plt.show()
 
