@@ -473,8 +473,6 @@ if __name__ == '__main__':
     else:
         dirname = os.path.join('../data', 'lrunml')
         data = utils.matlab_csv_to_teacher_data(dirname)
-
-    suptitle
     
     algcomp(data, target_model, data_model, args.num_examples, args.num_runs, filename=args.filename)
     plot_result(args.filename, args.plot_type, base_filename=args.figname)
