@@ -389,7 +389,7 @@ def __eval_dpgmm(data, labels, data_model, alpha=1.0):
 #     return ari
 
 
-def plot_result(filename, type='kde', suptitle=None):
+def plot_result(filename, type='kde', suptitle=None, base_filename=None):
     data = pickle.load(open(filename, 'rb'))
     N = [key for key in data.keys()]
     N = sorted(N)
@@ -404,7 +404,7 @@ def plot_result(filename, type='kde', suptitle=None):
 
     for i, n in enumerate(N):
         # f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, sharex=True, sharey=True, figsize=(4, 8))
-        f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, figsize=(12, 6))
+        f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, figsize=(20, 12))
         f.set_facecolor('white')
         c1, c2, c3 = sns.color_palette("Set1", 3)
 
@@ -437,14 +437,19 @@ def plot_result(filename, type='kde', suptitle=None):
 
         if suptitle is not None:
             plt.suptitle(suptitle)
+        else:
+            plt.suptitle("N=%i" % n)
 
-        plt.show()
+        if base_filename:
+            filename = base_filename + "_" + str(s) + "n.png"
+            plt.savefig(filename, dpi=300)
+        else:
+            plt.show()
 
 # _________________________________________________________________________________________________
 # Entry point
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
-    # TODO: argparse
     import argparse
     from idsteach.teacher import Teacher
     from idsteach.models import NormalInverseWishart
@@ -455,7 +460,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_runs', type=int, default=100, help='Number of runs to average over.')
     parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default) or 'violin'")
     parser.add_argument('--filename', type=str, default='alcomptest.pkl', help='save as filename')
-    parser.add_argument('--multirun', action='store_true', default=False, help='use data from multiple sampler chains')
+    parser.add_argument('--base_figname', type=str, default='alcomptest', help='save figure as filename')
 
     args = parser.parse_args()
 
@@ -468,7 +473,7 @@ if __name__ == '__main__':
         dirname = os.path.join('../data', 'lrunml')
         data = utils.matlab_csv_to_teacher_data(dirname)
 
+    suptitle
     
-    # algcomp(data, target_model, data_model, [50], 500, filename=filename)
     algcomp(data, target_model, data_model, args.num_examples, args.num_runs, filename=args.filename)
-    plot_result(args.filename, args.plot_type)
+    plot_result(args.filename, args.plot_type, base_filename=args.figname)
