@@ -460,6 +460,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_runs', type=int, default=100, help='Number of runs to average over.')
     parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default) or 'violin'")
     parser.add_argument('--filename', type=str, default='alcomptest.pkl', help='save as filename')
+    parser.add_argument('--multirun', action='store_true', default=False, help='use data from multiple sampler chains')
     parser.add_argument('--base_figname', type=str, default='alcomptest', help='save figure as filename')
 
     args = parser.parse_args()
