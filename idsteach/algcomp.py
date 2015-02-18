@@ -441,7 +441,7 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
             plt.suptitle("N=%i" % n)
 
         if base_filename:
-            filename = base_filename + "_" + str(s) + "n.png"
+            filename = base_filename + "_" + str(n) + "n.png"
             plt.savefig(filename, dpi=300)
         else:
             plt.show()
@@ -475,4 +475,4 @@ if __name__ == '__main__':
         data = utils.matlab_csv_to_teacher_data(dirname)
     
     algcomp(data, target_model, data_model, args.num_examples, args.num_runs, filename=args.filename)
-    plot_result(args.filename, args.plot_type, base_filename=args.figname)
+    plot_result(args.filename, args.plot_type, base_filename=args.base_figname)
