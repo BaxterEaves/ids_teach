@@ -45,8 +45,18 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
 
     size_t row_1, row_2;
     row_1 = row_rand(_rng);
+    ASSERT(std::cout, row_1 >= 0 and row_1 < _n);
+
+    unsigned int try_iters = 0
     do{
         row_2 = row_rand(_rng);
+        ASSERT(std::cout, row_2 >= 0 and row_2 < _n);
+        ++try_iters;
+        if(try_iters > _n){
+            std::cout << "Could not draw two unique rows among " << _n << "..." << std::endl;
+            std::cout << "First row was " << row_1 << "." << std::endl;
+            throw 1;
+        }
     }while(row_1 == row_2);
 
     auto k1 = _Z[row_1];

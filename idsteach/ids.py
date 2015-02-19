@@ -27,6 +27,8 @@ import copy
 
 sns.set_palette("gray")
 
+# FIXME: get relpath
+DEFAULT_HILLENBRAND = '../data/hillenbrand.csv'
 # _________________________________________________________________________________________________
 # Data taken from hillenbrand (F1 and F2)
 # `````````````````````````````````````````````````````````````````````````````````````````````````
@@ -206,7 +208,7 @@ hillenbrand_data = {
 # _________________________________________________________________________________________________
 # Data prep
 # `````````````````````````````````````````````````````````````````````````````````````````````````
-def full_hillenbrand_to_dict(filename='hillenbrand.csv'):
+def full_hillenbrand_to_dict(filename=DEFAULT_HILLENBRAND):
     """ pulls and preps data for all 3 formants """
     csvdata = np.genfromtxt(filename, delimiter=',', skip_header=1, dtype=str)
     data_out = copy.copy(hillenbrand_data)
