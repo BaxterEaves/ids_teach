@@ -62,10 +62,10 @@ class Teacher(object):
         data_model.validate_target_model(target)
 
         self._use_mp = use_mp
-        self._num_procs = mp.cpu_count()
+        self._num_procs = mp.cpu_count()*4
         self._fast_niw = fast_niw
 
-        if utils.bell_number(n)/float(self._num_procs) < 20 and self._use_mp:
+        if n < 6 and self._use_mp:
             print("**WARNING: The target conditions favor serial execution. Switching off multiprocessing.")
             self._use_mp = False
 
