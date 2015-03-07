@@ -17,6 +17,7 @@
 
 import os
 import math
+import pickle
 import numpy as np
 
 import matplotlib.pyplot as plt
@@ -138,6 +139,30 @@ def what_do_you_think_about_the_stars_in_the_sky():
         \r░░░░░░░▐██░░░░░░░░░░░░██▌░░░░░░░\n░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░"
     print(that_was_an_interesting_response)
 
+
+def flatten_niw_model(target_model, data_model):
+    """
+    remove f3 components
+    """
+    from idsteach.models import NormalInverseWishart
+
+    target_model['d'] = 2
+    for i, params in enumerate(target_model['parameters']):
+        params = list(params)
+        params[0] = np.copy(params[0][:2])
+        params[1] = np.copy(params[1][:2, :2])
+        target_model['parameters'][i] = tuple(params)
+
+    mu_0 = np.copy(data_model.mu_0[:2])
+    lambda_0 = np.copy(data_model.lambda_0[:2, :2])
+    nu_0 = 3
+    kappa_0 = 1
+
+    data_model = NormalInverseWishart(**dict(mu_0=mu_0, kappa_0=kappa_0, nu_0=nu_0, lambda_0=lambda_0))
+
+    return target_model, data_model
+
+
 def matlab_csv_to_teacher_data(dirname):
     """
     Utility to convert data from the old matlab code to something the new hotness (this code) can
@@ -151,6 +176,24 @@ def matlab_csv_to_teacher_data(dirname):
             data[z-1] = np.copy(samples[i, :])
         else:
             data[z-1] = np.vstack((data[z-1], np.copy(samples[i, :])))
+    return data
+
+
+def multiple_pandas_to_teacher_data(dirname, remove_f3=False):
+    basedir = os.path.join(dirname, '3d')
+    full_data = []
+    data = []
+    num_runs = 10
+    for d in range(1, num_runs+1):
+        filename = os.path.join(basedir, '%i'%d, 'data_f3_full_%i.pkl' % (d,))
+        full_data = pickle.load(open(filename, 'rb'))
+        if remove_f3:
+            full_data = [phoneme_data[:,:2] for phoneme_data in full_data]
+        if d == 1:
+            data = [phoneme_data for phoneme_data in full_data]
+        else:
+            for i, phoneme_data in enumerate(full_data):
+                data[i] = np.vstack((data[i], phoneme_data))
     return data
 
 
@@ -361,6 +404,7 @@ def plot_data_2d(teacher_data, target_model):
         plt.scatter(mu_target[0], mu_target[1], c='red', s=15**2, zorder=7)
 
 
+# http://stackoverflow.com/questions/12301071/multidimensional-confidence-intervals
 def plot_cov_ellipse(cov, pos, nstd=2, ax=None, **kwargs):
     """
     Plots an `nstd` sigma error ellipse based on the specified covariance
@@ -382,15 +426,23 @@ def plot_cov_ellipse(cov, pos, nstd=2, ax=None, **kwargs):
     -------
         A matplotlib ellipse artist
     """
-    sbplot = plt.gca()
-    v, w = linalg.eigh(cov)
-    u = w[0] / linalg.norm(w[0])
-    angle = np.arctan(u[1] / u[0])
-    angle = 180 * angle / np.pi  # convert to degrees
-    ell = Ellipse(pos, .04*v[0], .04*v[1], 180 + angle, **kwargs)
-    ell.set_clip_box(sbplot.bbox)
-    ell.set_alpha(kwargs.get('alpha', 0))
-    sbplot.add_artist(ell)
+
+    def eigsorted(cov):
+        vals, vecs = np.linalg.eigh(cov)
+        order = vals.argsort()[::-1]
+        return vals[order], vecs[:,order]
+
+    if ax is None:
+        ax = plt.gca()
+
+    vals, vecs = eigsorted(cov)
+    theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
+
+    # Width and height are "full" widths, not radius
+    width, height = 2 * nstd * np.sqrt(vals)
+    ellip = Ellipse(xy=pos, width=width, height=height, angle=theta, **kwargs)
+
+    ax.add_artist(ellip)
 
 if __name__ == "__main__":
     import doctest

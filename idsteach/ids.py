@@ -22,8 +22,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.axes3d as plt3
 import seaborn as sns
-
+import pandas as pd
 import copy
+import random
 
 sns.set_palette("gray")
 
@@ -35,7 +36,7 @@ DEFAULT_HILLENBRAND = '../data/hillenbrand.csv'
 all_the_vowels = ['AE', 'AH', 'AW', 'EH', 'EI', 'ER', 'IH', 'IY', 'OA', 'OO', 'UH', 'UW']
 corner_vowels = ['AH', 'IY', 'UW']  # FIXME: check this
 
-hillenbrand_data = {
+_hillenbrand_data = {
     'AE': {
         'data': np.array([
             [678, 2293], [624, 2442], [666, 2370], [743, 2230], [677, 2320], [627, 2266],
@@ -205,13 +206,17 @@ hillenbrand_data = {
 }
 
 
+def hillenbrand_data():
+    return copy.deepcopy(_hillenbrand_data)
+
+
 # _________________________________________________________________________________________________
 # Data prep
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 def full_hillenbrand_to_dict(filename=DEFAULT_HILLENBRAND):
     """ pulls and preps data for all 3 formants """
     csvdata = np.genfromtxt(filename, delimiter=',', skip_header=1, dtype=str)
-    data_out = copy.copy(hillenbrand_data)
+    data_out = hillenbrand_data()
     for key in data_out.keys():
         data_out[key]['data'] = None
 
@@ -276,7 +281,7 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
         which_phonemes = all_the_vowels
 
     if not f3:
-        input_data = hillenbrand_data
+        input_data = hillenbrand_data()
     else:
         input_data = full_hillenbrand_to_dict()
 
@@ -308,7 +313,8 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
 # _________________________________________________________________________________________________
 # IDS-specific plotting
 # `````````````````````````````````````````````````````````````````````````````````````````````````
-def plot_phoneme_models(teacher_data, target_model, labels, err_interval=.5, grayscale=False):
+def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1], nstd=2,
+                        grayscale=False, legend=False):
     """
     Plots the entire phoneme model. Creats scatter plots of the optimized and original data as well
     as their means and covariance matrices.
@@ -324,55 +330,90 @@ def plot_phoneme_models(teacher_data, target_model, labels, err_interval=.5, gra
         err_interval (float): The error interval to use for plotting covariance matricies.
         grayscale (bool): If True, plots in black and white (for publication)
     """
+    if len(formants) != 2:
+        raise ValueError("formants must have two entries")
+    if not isinstance(formants, (list, np.ndarray)):
+        raise TypeError("formants must be a list or ndarray")
+
     fontsize = 14
     if grayscale:
         # FIXME: colors aren't so great
         color_opt = 'black'
-        color_ads = 'white'
-        font_color = 'gray'
-    else:
-        color_opt = 'blue'
-        color_ads = 'red'
+        color_ads = 'gray'
         font_color = 'white'
+    else:
+        color_ads = '#DA0017'
+        color_opt = '#2C69A9'
+        font_color = 'white'
+
+    def cov_filter_2d(cov, formants):
+        out = np.zeros((2,2))
+        out[0, 0] = cov[formants[0], formants[0]]
+        out[1, 1] = cov[formants[1], formants[1]]
+        out[0, 1] = cov[formants[0], formants[1]]
+        out[1, 0] = cov[formants[1], formants[0]]
+        return out
 
     # plot original data
     for i, phoneme in enumerate(labels):
-        ads_data = hillenbrand_data[phoneme]['data']
-        ads_mean = target_model['parameters'][i][0]
-        ads_cov = target_model['parameters'][i][1]
+        ads_data = full_hillenbrand_to_dict()[phoneme]['data']
+        ads_mean = target_model['parameters'][i][0][formants]
+        ads_cov = cov_filter_2d(target_model['parameters'][i][1], formants)
 
-        opt_data = teacher_data[i][:48, :]
-        opt_mean = np.mean(teacher_data[i], axis=0)
-        opt_cov = np.cov(teacher_data[i], rowvar=0)
+        # NOTE: Plot 48 randomly-selected points from optimal data because
+        # the Hillenbrand data have ~48 points per phoneme
+        subset = random.sample(range(teacher_data[i].shape[0]), 48)
+        opt_data = teacher_data[i][subset, :]
+        opt_mean = np.mean(teacher_data[i][:,formants], axis=0)
+        opt_cov = cov_filter_2d(np.cov(teacher_data[i], rowvar=0), formants)
 
-        utils.plot_cov_ellipse(ads_cov, ads_mean, color=color_ads, ec=color_ads, lw=1, alpha=.2)
-        utils.plot_cov_ellipse(opt_cov, opt_mean, color=color_opt, ec=color_opt, lw=1, alpha=.2)
+        utils.plot_cov_ellipse(ads_cov, ads_mean, color=color_ads, ec=color_ads, lw=1, alpha=.2,
+                               nstd=nstd)
+        utils.plot_cov_ellipse(opt_cov, opt_mean, color=color_opt, ec=color_opt, lw=1, alpha=.2,
+                               nstd=nstd)
 
-        plt.scatter(ads_data[:, 0], ads_data[:, 1], color=color_ads)
-        plt.scatter(ads_mean[0], ads_mean[1], color=color_ads, s=20**2)
+        plt.scatter(opt_data[:, formants[0]], opt_data[:, formants[1]], color=color_opt, alpha=.5)
+        plt.scatter(ads_data[:, formants[0]], ads_data[:, formants[1]], color=color_ads, alpha=.5)
 
-        plt.scatter(opt_data[:, 0], opt_data[:, 1], color=color_opt)
-        plt.scatter(opt_mean[0], opt_mean[1], color=color_opt, s=20**2)
+        if i != 0:
+            plt.scatter(opt_mean[0], opt_mean[1], color=color_opt, s=12**2, zorder=9)
+            plt.scatter(ads_mean[0], ads_mean[1], color=color_ads, s=12**2, zorder=7)
+        else:
+            plt.scatter(opt_mean[0], opt_mean[1], color=color_opt, s=12**2, zorder=9, label='Teaching')
+            plt.scatter(ads_mean[0], ads_mean[1], color=color_ads, s=12**2, zorder=7, label='Original')
 
-        symbol = hillenbrand_data[phoneme]['unicode']
-        kwargs = dict(fontsize=fontsize, color=font_color, ha='center', va='center')
-        plt.text(ads_mean[0], ads_mean[1], symbol, **kwargs)
-        plt.text(opt_mean[0], opt_mean[1], symbol, **kwargs)
+        symbol = hillenbrand_data()[phoneme]['unicode']
+        kwargs_opt = dict(fontsize=fontsize, color=font_color, ha='center', va='baseline', zorder=10)
+        kwargs_ads = dict(fontsize=fontsize, color=font_color, ha='center', va='baseline', zorder=8)
+
+        plt.text(ads_mean[0], ads_mean[1], symbol, **kwargs_ads)
+        plt.text(opt_mean[0], opt_mean[1], symbol, **kwargs_opt)
+
+    plt.xlabel('F%i (Hz)' % (formants[0]+1,))
+    plt.ylabel('F%i (Hz)' % (formants[1]+1,))
+
+    if legend: plt.legend(loc=0)
 
 
-def plot_phoneme_articulation(teacher_data, target_model, labels):
+def plot_phoneme_articulation(teacher_data, target_model, labels, ax=None, indices=None):
     """
     Plots the change in distance between each phoneme pair from ADS to optimized data. Sorts by
     distance. Black bars are corner vowel pairs.
+
+    Works for any-dimensional data
     """
     num_phonemes = len(labels)
+    num_dims = teacher_data[0][0].shape[1]
+
+    if ax is None:
+        ax = plt.gca()
 
     # process ads_data
     means_ads = []
     phoneme_symbols = []
     for i, phoneme in enumerate(labels):
         means_ads.append(target_model['parameters'][i][0])
-        phoneme_symbols.append(hillenbrand_data[phoneme]['unicode'])
+        phoneme_symbols.append(hillenbrand_data()[phoneme]['unicode'])
 
     # prcess optimized data
     means_opt = []
@@ -393,21 +434,22 @@ def plot_phoneme_articulation(teacher_data, target_model, labels):
         pair_label = phoneme_symbols[phoneme_1] + '-' + phoneme_symbols[phoneme_2]
         pair_labels.append(pair_label)
         if labels[phoneme_1] in corner_vowels and labels[phoneme_2] in corner_vowels:
-            bar_colors.append('black')
+            bar_colors.append('#8899aa')
         else:
-            bar_colors.append('white')
+            bar_colors.append('#333333')
 
         dist_ads = utils.dist(means_ads[phoneme_1], means_ads[phoneme_2])
         for i in range(len(teacher_data)):
             dist_opt = utils.dist(means_opt[i][phoneme_1], means_opt[i][phoneme_2])
             delta = dist_opt-dist_ads
-            # import pdb; pdb.set_trace()
             deltas[i, j] = delta
 
     delta_means = np.mean(deltas, axis=0)
     delta_stds = np.std(deltas, axis=0)
 
-    indices = np.argsort(delta_means).tolist()
+    if indices is None:
+        indices = np.argsort(delta_means).tolist()
+
     delta_means = [delta_means[i] for i in indices]
     if len(teacher_data) > 1:
         delta_stds = [delta_stds[i] for i in indices]
@@ -419,10 +461,19 @@ def plot_phoneme_articulation(teacher_data, target_model, labels):
     num_phoneme_pairs = len(indices)
     bar_x = np.arange(num_phoneme_pairs)
     label_x = bar_x+0.5
-    plt.bar(bar_x, delta_means, yerr=delta_stds, color=bar_colors)
-    plt.plot([-.2, num_phoneme_pairs], [0, 0])
-    plt.xlim([-.2, num_phoneme_pairs])
-    plt.xticks(label_x, pair_labels, rotation='vertical')
+    plt.bar(bar_x, delta_means, yerr=delta_stds, color=bar_colors, edgecolor='none')
+    plt.plot([-.2, num_phoneme_pairs], [0, 0], lw=.5)
+    ax.set_xlim([-.2, num_phoneme_pairs])
+    ax.set_xticks(label_x)
+    ax.set_xticklabels(pair_labels, rotation='vertical', fontsize=12)
+    if num_dims == 3:
+        ax.set_ylabel("Δ distance (Hz; F1, F2, F3)")
+    elif num_dims == 2:
+        ax.set_ylabel("Δ distance (Hz; F1, F2)")
+    else:
+        ax.set_ylabel("Δ distance (Hz)")
+
+    return indices
 
 
 def plot_phoneme_variation(teacher_data, target_model, labels):
@@ -430,8 +481,98 @@ def plot_phoneme_variation(teacher_data, target_model, labels):
     Plots the change in F1 and F2 varaince and F1-F2 covariance for each phoneme from ADS to
     optimized data.
     """
-    # FIXME: fill in
-    pass
+    unicode_labels = [hillenbrand_data()[l]['unicode'] for l in labels]
+    cov_diffs = []
+    for t_data in teacher_data:
+        data_cov = [np.cov(d.T) for d in t_data]
+        cov_diffs.append([c - p[1] for c, p in zip(data_cov, target_model['parameters'])])
+
+    def flatten_cov(cov, phoneme_label):
+        entry_names = []
+        num_formants = cov.shape[0]
+        out = []
+
+        for i in range(num_formants):
+            for j in range(i+1):
+                if i == j:
+                    entry_names.append("F%i" %(i+1,))
+                else:
+                    entry_names.append("F%i-F%i" %(i+1, j+1,))
+                out.append(cov[i, j])
+
+        # for i in range(num_formants):
+        #     out.append(cov[i, i])
+        #     entry_names.append('F_%i' % (i+1,))
+
+        # for i in range(num_formants):
+        #     for j in range(i+1, num_formants):
+        #         out.append(cov[i, j])
+        #         entry_names.append('F_%i-F_%i' % (i+1, j+1,))
+
+        out = dict(zip(entry_names, out))
+        out['phoneme'] = phoneme_label
+        return out, entry_names
+
+    to_df = []
+    for cov_diff in cov_diffs:
+        to_df+= [flatten_cov(cov, unicode_labels[i])[0] for i, cov in enumerate(cov_diff)]
+    df = pd.DataFrame(to_df)
+
+    _, var_names = flatten_cov(cov_diff[0], 'NULL')
+
+    num_datasets = len(teacher_data)
+    num_phonemes = len(unicode_labels)
+    num_dims = cov_diffs[0][0].shape[0]
+
+    # plot_nums = np.tril((np.arange(num_dims**2)+1).reshape((num_dims, num_dims)))
+    # plot_nums = plot_nums[np.nonzero(plot_nums != 0)].flatten()
+    plot_nums = [i+1 for i in range(len(var_names))]
+    axes = []
+    for i, var_label in enumerate(var_names):
+        subplt = plot_nums[i]
+        # ax = plt.subplot(num_dims, num_dims, subplt)
+        # ax = plt.subplot(int(len(var_names)/3), 3, subplt)
+        ax = plt.subplot(1, len(var_names), subplt)
+        axes.append(ax)
+        means = np.zeros(num_phonemes)
+        errs = np.zeros( num_phonemes)
+        for p, phoneme in enumerate(unicode_labels):
+            means[p] = df.loc[df['phoneme'] == phoneme][var_label].mean()
+            errs[p] = df.loc[df['phoneme'] == phoneme][var_label].std()/num_datasets**.5
+
+        # plt.bar(np.arange(num_phonemes), means, yerr=errs)
+        plt.bar(np.arange(num_phonemes), means, color='#333333')
+        ax.set_xticks(np.arange(len(labels)))
+        ax.set_xticklabels(unicode_labels)
+        plt.title(var_label)
+        if i == 0:
+            plt.ylabel('Δ Variance (symmetric log scale)')
+        else:
+            plt.ylabel('')
+            ax.set_yticklabels([])
+
+    x_min = []
+    x_max = []
+    y_min = []
+    y_max = []
+    for ax in axes:
+        x_min.append(ax.get_xlim()[0])
+        x_max.append(ax.get_xlim()[1])
+        y_min.append(ax.get_ylim()[0])
+        y_max.append(ax.get_ylim()[1])
+    for i, ax in  enumerate(axes):
+        ax.set_xlim(min(x_min), max(x_max))
+        ax.set_ylim(min(y_min), max(y_max))
+        ax.set_yscale('symlog')
+        ax.set_xticks(np.arange(num_phonemes)+.5)
+        if plot_nums[i] > 1: ax.set_yticklabels([])
+    #     if (plot_nums[i]-1) % num_dims:
+    #         ax.set_yticklabels([])
+    #         ax.set_ylabel('')
+    #     if plot_nums[i] < num_dims*(num_dims-1):
+    #         ax.set_xlabel('')
+    #         ax.set_xticklabels([])
+
 
 if __name__ == "__main__":
     import doctest

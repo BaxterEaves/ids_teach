@@ -83,9 +83,9 @@ To rerun the algorithm learning performance comparison (`FIXME: tablename`):
 An example can be found in `main.py`.
 ####Step 1. Specify a target model
 ```python
-from ids_teach import utils
-from ids_teach.teacher import Teacher
-from ids_teach.models import NormalInverseWishart
+from idsteach import utils
+from idsteach.teacher import Teacher
+from idsteach.models import NormalInverseWishart
 import numpy as np
 
 # triangle

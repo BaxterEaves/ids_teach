@@ -47,7 +47,7 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
     row_1 = row_rand(_rng);
     ASSERT(std::cout, row_1 >= 0 and row_1 < _n);
 
-    unsigned int try_iters = 0
+    unsigned int try_iters = 0;
     do{
         row_2 = row_rand(_rng);
         ASSERT(std::cout, row_2 >= 0 and row_2 < _n);

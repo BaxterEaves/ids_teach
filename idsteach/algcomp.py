@@ -26,6 +26,9 @@ import multiprocessing as mp
 from idsteach import ids
 from idsteach import utils
 
+from scipy.stats import ks_2samp
+from scipy.stats import ttest_ind
+
 from idsteach.dpgmm import DPGMM
 from idsteach.fastniw import PyDPGMM
 
@@ -44,7 +47,8 @@ import seaborn as sns  # never called explictly, but changes pyplot settings
 # theses are the algorihtms we evaluate. Note that scikit implmentations of vbgmm and dpgmm
 # need some work, so I do not include them in analyses (I use my own implementation of dpgmm).
 # algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'vbgmm', 'dpgmm']
-algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'dpgmm']
+# algorithm_list = ['logit', 'svm_linear', 'k_means', 'gmm', 'dpgmm']
+algorithm_list = ['logit', 'svm_linear', 'gmm', 'dpgmm']
 
 
 def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None, do_plot=False):
@@ -64,7 +68,7 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
         opt_data (list<numpy.ndarray>): A list a data, separated by category (<teacher>.data)
         target_model (dict): target_model used to generate opt_data
         data_model (CollapsibleDistribution): data model with prior used by the teacher
-        n_per_cat (list<int>): number of data points to use for training and testing. 
+        n_per_cat (list<int>): number of data points to use for training and testing.
         n_runs (int): number of times over which to average results
 
     Kwargs:
@@ -97,8 +101,8 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
     for j, n_per in enumerate(n_per_cat):
         print("Running evaluations for {0} examples per category for {1} runs.".format(n_per, n_runs))
         data_output[n_per] = dict()
-        ari_orig_n = __prep_result_holder(n_runs)
-        ari_opt_n = __prep_result_holder(n_runs)
+        res_orig_n = __prep_result_holder(n_runs)
+        res_opt_n = __prep_result_holder(n_runs)
 
         # construct args. seed the rng for each processor. I was having trouble with the numpy rng
         # using the same seed across cores.
@@ -109,18 +113,20 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
         pool = mp.Pool()
         pool.daemon = True
         res = pool.map(__eval_all_mp, args)
-        for i, (ari_orig_res, ari_opt_res) in enumerate(res):
+        for i, (orig_res, opt_res, z_true) in enumerate(res):
             for alg in algorithm_list:
-                ari_orig_n[alg][i] = ari_orig_res[alg]
-                ari_opt_n[alg][i] = ari_opt_res[alg]
+                res_orig_n[alg]['ari'][i] = orig_res[alg][0]
+                res_opt_n[alg]['ari'][i] = opt_res[alg][0]
+                res_orig_n[alg]['z'][i] = orig_res[alg][1]
+                res_opt_n[alg]['z'][i] = opt_res[alg][1]
 
         print(' ')
 
         for alg in algorithm_list:
-            ari_orig_mean[alg][j]  = np.mean(ari_orig_n[alg])
-            ari_orig_std[alg][j]  = np.std(ari_orig_n[alg])
-            ari_opt_mean[alg][j]  = np.mean(ari_opt_n[alg])
-            ari_opt_std[alg][j]  = np.std(ari_opt_n[alg])
+            ari_orig_mean[alg][j] = np.mean(res_orig_n[alg]['ari'])
+            ari_orig_std[alg][j] = np.std(res_orig_n[alg]['ari'])
+            ari_opt_mean[alg][j] = np.mean(res_opt_n[alg]['ari'])
+            ari_opt_std[alg][j] = np.std(res_opt_n[alg]['ari'])
 
         # build table
         table_data = np.zeros((len(keys), len(columns)))
@@ -132,9 +138,9 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
 
         df = pd.DataFrame(table_data, index=keys, columns=columns)
         data_output[n_per]['dataframe'] = df
-        data_output[n_per]['ari_optimal'] = ari_opt_n
-        data_output[n_per]['ari_original'] = ari_orig_n
-
+        data_output[n_per]['res_optimal'] = res_opt_n
+        data_output[n_per]['res_original'] = res_orig_n
+        data_output[n_per]['z_true'] = z_true
         print(df)
 
     if filename is not None:
@@ -158,10 +164,10 @@ def __eval_all(opt_data, target_model, data_model, n_per_cat, do_plot=False):
         n_per_cat (int): number of data points to use for training and testing
 
     Returns:
-        aris_orig (dict): each  (key, value) is a algorithm (str) the ARI value achieved by that
-            algorithm on the data sampled from the target model
-        aris_opt (dict): each  (key, value) is a algorithm (str) the ARI value achieved by that
-            algorithm on a subset of the optimzed data
+        res_orig (dict): each (key, value) pair corresponds to an algorithm (str) and a tuples with
+            the  ARI value (float) that algorithm achieved and its inferred assignment vector
+        res_opt (dict): each (key, value) pair corresponds to an algorithm (str) and a tuples with
+            the  ARI value (float) that algorithm achieved and its inferred assignment vector
     """
     data_train_orig, z_train_orig = __prep_standard_data(target_model, data_model, n_per_cat)
     data_test_orig, z_test_orig = __prep_standard_data(target_model, data_model, n_per_cat)
@@ -176,7 +182,7 @@ def __eval_all(opt_data, target_model, data_model, n_per_cat, do_plot=False):
 
         plt.subplot(2, 2, 2)
         plt.scatter(data_train_opt[:, 0], data_train_opt[:, 1], alpha=.5, color='blue')
-        plt.title('Optimal data (train)') 
+        plt.title('Optimal data (train)')
 
         plt.subplot(2, 2, 3)
         plt.scatter(data_test_orig[:, 0], data_test_orig[:, 1], alpha=.5, color='red')
@@ -187,14 +193,15 @@ def __eval_all(opt_data, target_model, data_model, n_per_cat, do_plot=False):
         plt.title('Optimal data (test)')
         plt.draw()
 
-    print(".", end=" ")
+    print(".", end="")
     sys.stdout.flush()
-    aris_orig = __eval_set(data_train_orig, z_train_orig, data_test_orig, z_test_orig, data_model)
-    print("`", end=" ")
+    res_orig = __eval_set(data_train_orig, z_train_orig, data_test_orig, z_test_orig, data_model)
+    print("`", end="")
     sys.stdout.flush()
-    aris_opt = __eval_set(data_train_opt, z_train_opt, data_test_opt, z_test_opt, data_model)
+    res_opt = __eval_set(data_train_opt, z_train_opt, data_test_opt, z_test_opt, data_model)
 
-    return aris_orig, aris_opt
+    return res_orig, res_opt, z_test_opt
+
 
 def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
     """
@@ -209,47 +216,48 @@ def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
         test_labels (numpy.ndarray): labels of testing data
 
     Returns:
-        ari (dict): each (key, value) pair corresponds to an algorithm (str) and the  ARI value
-            (float) that algorithm achieved
+        res (dict): each (key, value) pair corresponds to an algorithm (str) and a tuples with
+            the  ARI value (float) that algorithm achieved and its inferred assignment vector
     """
 
     # fixed-categoty algorithms
     K = max(train_labels)+1
-    ari_k_means = __eval_kmeans(train_data, train_labels, K)
-    ari_gmm = __eval_gmm(train_data, train_labels, K)
+    res_kmeans = __eval_kmeans(train_data, train_labels, K)
+    res_gmm = __eval_gmm(train_data, train_labels, K)
 
     # variational algorithms
-    # ari_vbgmm = __eval_vbgmm(train_data, train_labels, alpha=1.0)
-    ari_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0)
+    # res_vpgmm = __eval_vbgmm(train_data, train_labels, alpha=1.0)
+    res_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0)
 
     # labeled-set algorithms
-    ari_logit = __eval_logit(train_data, train_labels, test_data, test_labels)
-    ari_svm_linear = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear')
-    ari_svm_rbf = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='rbf')
+    res_logit = __eval_logit(train_data, train_labels, test_data, test_labels)
+    res_svm_linear = __eval_svm(train_data, train_labels, test_data,
+                                              test_labels, kernel='linear')
+    # res_svm_rbf = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='rbf')
 
-    ari = {
-        'logit': ari_logit,
-        'svm_linear': ari_svm_linear,
-        'svm_rbf': ari_svm_rbf,
-        'k_means': ari_k_means,
-        'gmm': ari_gmm,
-        # 'vbgmm': ari_vbgmm,
-        'dpgmm': ari_dpgmm,
+    # each entry in res is an (ARI, assgnment vector) tuple
+    res = {
+        'logit': res_logit,
+        'svm_linear': res_svm_linear,
+        'k_means': res_kmeans,
+        'gmm': res_gmm,
+        # 'vbgmm': res_vbgmm,
+        'dpgmm': res_dpgmm,
     }
 
-    return ari
+    return res
 
 
 # __________________________________________________________________________________________________
 # helpers
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
 def __prep_result_holder(n):
-    """ 
+    """
     Returns a dict with a n-length numpy.ndarray of zeros for each clustering algorithm
     """
     holder = dict()
     for alg in algorithm_list:
-        holder[alg] = np.zeros(n, dtype=np.dtype(float))    
+        holder[alg] = {'ari': np.zeros(n, dtype=np.dtype(float)), 'z': [None]*n}
     return holder
 
 
@@ -300,7 +308,7 @@ def __eval_kmeans(data, labels, num_clusters):
     km.fit(data)
     Z = km.predict(data)
     ari = metrics.adjusted_rand_score(labels, Z)
-    return ari
+    return ari, Z
 
 
 def __eval_gmm(data, labels, num_components):
@@ -311,7 +319,7 @@ def __eval_gmm(data, labels, num_components):
     gmm.fit(data)
     Z = gmm.predict(data)
     ari = metrics.adjusted_rand_score(labels, Z)
-    return ari
+    return ari, Z
 
 
 # __________________________________________________________________________________________________
@@ -319,14 +327,14 @@ def __eval_gmm(data, labels, num_components):
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
 def __eval_logit(train_data, train_labels, test_data, test_labels):
     """
-    Multinomial logistic regression. 
+    Multinomial logistic regression.
     Trained on train_data, tested on test_data. Returns ARI(test_labels, Z)
     """
     lr = LogisticRegression()
     lr.fit(train_data, train_labels)
     Z = lr.predict(test_data)
     ari = metrics.adjusted_rand_score(test_labels, Z)
-    return ari
+    return ari, Z
 
 
 def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'):
@@ -338,7 +346,7 @@ def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'
     vm.fit(train_data, train_labels)
     Z = vm.predict(test_data)
     ari = metrics.adjusted_rand_score(test_labels, Z)
-    return ari
+    return ari, Z
 
 
 # __________________________________________________________________________________________________
@@ -358,82 +366,179 @@ def __eval_vbgmm(data, labels, alpha=1.0):
     vbgmm.fit(data)
     Z = vbgmm.predict(data)
     ari = metrics.adjusted_rand_score(labels, Z)
-    # import pdb; pdb.set_trace()
-    return ari
+    return ari, Z
 
 
 def __eval_dpgmm(data, labels, data_model, alpha=1.0):
     """
-    Dirichlet proccess EM for Gaussian mixture models. 
+    Dirichlet proccess EM for Gaussian mixture models.
     Returns ARI(test_labels, Z)
     """
     dpgmm = PyDPGMM(data_model, data, crp_alpha=alpha, init_mode='single_cluster')
-    Z = dpgmm.fit(n_iter=200, sm_prop=.25, sm_burn=50, num_sm_sweeps=2)
-    # dpgmm = DPGMM(data_model, data, crp_alpha=alpha, init_mode='single_cluster')
+    Z = dpgmm.fit(n_iter=500, sm_prop=.25, sm_burn=50, num_sm_sweeps=2)
     # Z = dpgmm.fit(n_iter=200, sm_prop=.8, sm_burn=10)
     ari = metrics.adjusted_rand_score(labels, Z)
-    return ari
-
-# def __eval_dpgmm(data, labels, data_model, alpha=1.0):
-#     """
-#     Dirichlet proccess EM for Gaussian mixture models. 
-#     Returns ARI(test_labels, Z)
-#     """
-#     data_cpy = np.copy(data)
-#     data_cpy -= np.mean(data_cpy, axis=0)
-#     data_cpy /= np.max(data_cpy)
-#     dpgmm = DPGMM_sk(n_components=min(20, data_cpy.shape[0]), alpha=1.0,  n_iter=10000)
-#     dpgmm.fit(data_cpy)
-#     Z = dpgmm.predict(data_cpy)
-#     ari = metrics.adjusted_rand_score(labels, Z)
-#     return ari
+    return ari, Z
 
 
-def plot_result(filename, type='kde', suptitle=None, base_filename=None):
-    data = pickle.load(open(filename, 'rb'))
-    N = [key for key in data.keys()]
-    N = sorted(N)
-    
-    n_sbplts_x = 3
-    n_sbplts_y = 2
+def ari_subset(data_n, category_list):
+    idx = [i for i, zi in enumerate(data_n['z_true']) if zi in category_list]
+    z_true = [data_n['z_true'][i] for i in idx]
+    res_optimal = dict()
+    res_original = dict()
+    for alg in algorithm_list:
+        res_optimal[alg] = np.zeros(len(data_n['res_optimal'][alg]['ari']))
+        res_original[alg] = np.zeros(len(data_n['res_original'][alg]['ari']))
+        for i in range(len(data_n['res_optimal'][alg]['z'])):
+            z_opt = [data_n['res_optimal'][alg]['z'][i][z] for z in idx]
+            z_orig = [data_n['res_original'][alg]['z'][i][z] for z in idx]
+            res_optimal[alg][i] = metrics.adjusted_rand_score(z_true, z_opt)
+            res_original[alg][i] = metrics.adjusted_rand_score(z_true, z_orig)
+
+    return res_optimal, res_original
+
+
+def plot_single_result(df, ptype, axes):
 
     def get_clip(x):
         s = np.std(x)
         m = np.mean(x)
         return [m-4.0*s, m+4.0*s]
 
+    c1, c2, c3 = sns.color_palette("Set1", 3)
+
+    for j, alg in enumerate(algorithm_list):
+        ari_orig = df['res_original'][alg]['ari']
+        ari_opt = df['res_optimal'][alg]['ari']
+
+        ks_ari, p_ari = ks_2samp(ari_orig, ari_opt)
+        if ptype == 'kde':
+            clip_orig = get_clip(ari_orig)
+            clip_opt = get_clip(ari_opt)
+
+            sns.distplot(ari_orig, color=c1, ax=axes[j],
+                         kde_kws=dict(clip=clip_orig, label=(None if j > 0 else 'Original'),
+                                      lw=2),
+                         hist_kws=dict(histtype="stepfilled"))
+            sns.distplot(ari_opt, color=c2, ax=axes[j],
+                         kde_kws=dict(clip=clip_opt, label=None if j > 0 else 'Teaching',
+                                      lw=2),
+                         hist_kws=dict(histtype="stepfilled"))
+            txt = "KS: %1.4f\np: %1.4f" % (ks_ari, p_ari)
+            axes[j].text(1, .9, txt, ha='right', va='center', transform=axes[j].transAxes, color='#333333')
+
+            x_l = axes[j].get_xlim()[0]
+            x_u = axes[j].get_xlim()[1]
+            xstp = (x_u - x_l)/3.
+            xticks = [x_l, x_l + xstp, x_l + xstp*2, x_u]
+            xticks = [round(tick, 2) for tick in xticks]
+            axes[j].set_xlim([x_l, x_u])
+            axes[j].set_xlabel('')
+            axes[j].set_xticks(xticks)
+            if j == 0:
+                axes[j].set_xlabel('ARI')
+                axes[j].set_ylabel('Density')
+                axes[j].legend(loc=2)
+        elif ptype == 'violin':
+            sns.violinplot([ari_orig, ari_opt], positions=[1, 2], ax=axes.flat[j],
+                           names=['original', 'optimized'], alpha=.5)
+
+            axes[j].set_ylabel('ARI')
+        tstat, tp = ttest_ind(ari_orig, ari_opt)
+        print("{0} T: {1}, p = {2}".format(alg.upper(), tstat, tp))
+        axes[j].set_title(alg.upper())
+
+    return axes
+
+def plot_compare(filename_top, filename_bottom, N, ylabel_t='Density', ylabel_b='Density', figwidth=15.):
+    type = 'kde'
+
+    color_ads = '#DA0017'
+    color_opt = '#2C69A9'
+    f, axes = plt.subplots(2, len(algorithm_list), figsize=(figwidth, figwidth/2.5))
+    axes_top = axes[0, :].tolist()
+    axes_bottom = axes[1, :].tolist()
+
+    df_top = pickle.load(open(filename_top, 'rb'))[N]
+    df_bottom = pickle.load(open(filename_bottom, 'rb'))[N]
+
+    axes_top = plot_single_result(df_top, type, axes_top)
+    axes_bottom = plot_single_result(df_bottom, type, axes_bottom)
+
+    x_min = []
+    x_max = []
+    y_max = []
+    for ax in axes_top + axes_bottom:
+        y_max.append(ax.get_ylim()[1])
+        x_min.append(ax.get_xlim()[0])
+        x_max.append(ax.get_xlim()[1])
+
+    for i, (ax_t, ax_b) in enumerate(zip(axes_top, axes_bottom)):
+        x_l = min(ax_t.get_xlim()[0], ax_b.get_xlim()[0])
+        x_u = max(ax_t.get_xlim()[1], ax_b.get_xlim()[1])
+        xstp = (x_u - x_l)/3.
+        xticks = [x_l, x_l + xstp, x_l + xstp*2, x_u]
+        xticks = [round(tick, 2) for tick in xticks]
+        ax_t.set_xlim([x_l, x_u])
+        ax_t.set_ylim([0, max(y_max)])
+        ax_t.set_xlabel('')
+        ax_t.set_xticks(xticks)
+        ax_t.set_xticklabels([])
+
+        ax_b.set_title('')
+        ax_b.set_xlim([x_l, x_u])
+        ax_b.set_xticks(xticks)
+        ax_b.set_ylim([0, max(y_max)])
+        ax_b.set_xlabel('ARI')
+        # ax_b.set_xticklabels([])
+        if i > 0:
+            ax_t.set_yticklabels([])
+            ax_t.set_ylabel('')
+
+            ax_b.set_yticklabels([])
+            ax_b.set_ylabel('')
+        else:
+            ax_t.set_ylabel(ylabel_t)
+            ax_b.set_ylabel(ylabel_b)
+            ax_b.legend().set_visible(False)
+
+    for i, alg in enumerate(algorithm_list):
+        mot = df_top['ari_original'][alg].mean()
+        mtt = df_top['ari_optimal'][alg].mean()
+
+        axes_top[i].plot([mot, mot], [0, max(y_max)], lw=2, color=color_ads, ls='--')
+        axes_top[i].plot([mtt, mtt], [0, max(y_max)], lw=2, color=color_opt, ls='--')
+
+        mob = df_bottom['ari_original'][alg].mean()
+        mtb = df_bottom['ari_optimal'][alg].mean()
+
+        axes_bottom[i].plot([mob, mob], [0, max(y_max)], lw=2, color=color_ads, ls='--')
+        axes_bottom[i].plot([mtb, mtb], [0, max(y_max)], lw=2, color=color_opt, ls='--')
+    # for i, ax in enumerate(axes_bottom):
+    #     ax.set_xlim([min(x_min), max(x_max)])
+    #     ax.set_ylim([0, max(y_max)])
+    #     ax.set_title('')
+    #     if i > 0:
+    #         ax.set_yticklabels([])
+    #         ax.set_ylabel('')
+
+    return f, axes
+
+
+def plot_result(filename, type='kde', suptitle=None, base_filename=None):
+    data = pickle.load(open(filename, 'rb'))
+    N = [key for key in data.keys()]
+    N = sorted(N)
+
+    # n_sbplts_x = 3
+    # n_sbplts_y = 2
+
     for i, n in enumerate(N):
         # f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, sharex=True, sharey=True, figsize=(4, 8))
-        f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, figsize=(20, 12))
+        f, axes = plt.subplots(1, len(algorithm_list), figsize=(24, 24/6))
         f.set_facecolor('white')
-        c1, c2, c3 = sns.color_palette("Set1", 3)
 
-        for j, alg in enumerate(algorithm_list):
-            ari_orig = data[n]['ari_original'][alg]
-            ari_opt = data[n]['ari_optimal'][alg]
-
-            if type == 'kde':
-                clip_orig = get_clip(ari_orig)
-                clip_opt = get_clip(ari_opt)
-
-                # sns.kdeplot(ari_orig, shade=True, color=c1, ax=axes.flat[j], clip=clip_orig, label='original')
-                # sns.kdeplot(ari_opt, shade=True, color=c2, ax=axes.flat[j], clip=clip_opt, label='optimal')
-                sns.distplot(ari_orig, color=c1, ax=axes.flat[j], 
-                    kde_kws=dict(clip=clip_orig, label='original', lw=3),
-                    hist_kws=dict(histtype="stepfilled"))
-                sns.distplot(ari_opt, color=c2, ax=axes.flat[j],
-                    kde_kws=dict(clip=clip_opt, label='optimized', lw=3),
-                    hist_kws=dict(histtype="stepfilled"))
-
-                axes.flat[j].set_xlabel('ARI')
-                axes.flat[j].set_ylabel('Density')
-            elif type == 'violin':
-                sns.violinplot([ari_orig, ari_opt], positions=[1, 2], ax=axes.flat[j],
-                    names=['original','optimized'], alpha=.5)
-
-                axes.flat[j].set_ylabel('ARI')
-
-            axes.flat[j].set_title(alg.upper())
+        axes = plot_single_result(data[n], type, axes)
 
         if suptitle is not None:
             plt.suptitle(suptitle)
@@ -456,23 +561,45 @@ if __name__ == '__main__':
     import numpy as np
 
     parser = argparse.ArgumentParser(description='Run examples')
-    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+',help='list of number of exampler per phoneme')
+    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+',help='list of number '+
+                        'of exampler per phoneme')
     parser.add_argument('--num_runs', type=int, default=100, help='Number of runs to average over.')
-    parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default) or 'violin'")
+    parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default)"
+                        "or 'violin'")
     parser.add_argument('--filename', type=str, default='alcomptest.pkl', help='save as filename')
-    parser.add_argument('--multirun', action='store_true', default=False, help='use data from multiple sampler chains')
-    parser.add_argument('--base_figname', type=str, default='alcomptest', help='save figure as filename')
+    parser.add_argument('--multirun', action='store_true', default=False, help='use data from '
+                        'multiple sampler chains')
+    parser.add_argument('--base_figname', type=str, default='alcomptest', help='save figure as '
+                        'filename')
+    parser.add_argument('--matlab_data', action='store_true', help='input data is a matlab .csv '
+                        'rather than pandas df')
+    parser.add_argument('--flatten', action='store_true', help='Remove f3 dimension (only '
+                        'applicable for non-matlab data')
 
     args = parser.parse_args()
 
-    target_model, labels = ids.gen_model()
+    if args.flatten and args.matlab_data:
+        raise ValueError('Cannot flatten matlab data')
+
+    target_model, labels = ids.gen_model(f3=(not args.matlab_data))
     data_model = NormalInverseWishart.with_vague_prior(target_model)
+
+    if args.flatten:
+        target_model, data_model = utils.flatten_niw_model(target_model, data_model)
+
     if args.multirun:
-        dirname = '../data'
-        data = utils.multiple_matlab_csv_to_teacher_data(dirname)
+        if ars.matlab_data:
+            dirname = os.path.join('../data', 'ml_runs')
+            data = utils.multiple_matlab_csv_to_teacher_data(dirname)
+        else:
+            raise NotImplementedError('Must use multiple data sets when using pandas')
     else:
-        dirname = os.path.join('../data', 'lrunml')
-        data = utils.matlab_csv_to_teacher_data(dirname)
-    
+        if args.matlab_data:
+            dirname = os.path.join('../data', 'lrunml')
+            data = utils.matlab_csv_to_teacher_data(dirname)
+        else:
+            dirname = os.path.join('../data', 'ptn_runs')
+            data = utils.multiple_pandas_to_teacher_data(dirname, remove_f3=args.flatten)
+
     algcomp(data, target_model, data_model, args.num_examples, args.num_runs, filename=args.filename)
     plot_result(args.filename, args.plot_type, base_filename=args.base_figname)
