@@ -37,6 +37,8 @@ cdef extern from "dpgmm.hpp":
                  size_t num_sm_sweeps,
                  size_t sm_burn)
 
+        vector[size_t] predict(vector[vector[double]])
+
         vector[size_t] get_Z()
 
 
@@ -86,6 +88,9 @@ cdef class PyDPGMM:
         """
         self.thisptr.fit(n_iter, sm_prop, num_sm_sweeps, sm_burn)
         return self.thisptr.get_Z()
+
+    def predict(self, data):
+        return self.thisptr.predict(data)
 
 
 def __check_2d_and_reshape(X):

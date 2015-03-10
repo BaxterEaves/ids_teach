@@ -70,6 +70,10 @@ public:
     // Does n Gibbs speeps
     void fit(size_t n_iter, double sm_prop, size_t num_sm_sweeps, size_t sm_burn);
 
+    // predicts to which cateogry each datum in Y would be assigned
+    std::vector<size_t> predict(std::vector<std::vector<double>> Y);
+    std::vector<size_t> predict(arma::mat Y);
+
     // Returns the assignment vector
     std::vector<size_t> get_Z(){return _Z;};
 

@@ -34,6 +34,41 @@ void DPGMM::fit(size_t n, double sm_prop, size_t num_sm_sweeps, size_t sm_burn)
 }
 
 
+vector<size_t> DPGMM::predict(arma::mat Y)
+{ 
+    vector<size_t> prediction;
+
+    for(size_t i = 0; i < Y.n_rows; ++i){
+        arma::mat y = Y.row(i);
+        ASSERT_EQUAL(std::cout, y.n_rows, 1);
+        ASSERT_EQUAL(std::cout, y.n_cols, _X.n_cols);
+
+        std::vector<double> ps(_Nk.begin(), _Nk.end());
+        for(auto & p : ps) p = log(p);
+
+        for(size_t k = 0; k < _K; ++k){
+            std::vector<size_t> idx;
+            for(size_t i = 0; i < _n; ++i) if (_Z[i] == k) idx.push_back(i);
+
+            auto Xk = fetch_rows(_X, idx);
+            ASSERT_EQUAL(std::cout, Xk.n_rows, _Nk[k]);
+            ps[k] += lgniwpp(y, Xk, _mu_0, _lambda_0, _kappa_0, _nu_0);
+        }
+
+        size_t k = argmax(ps);
+        ASSERT(std::cout, k < _K);
+        prediction.push_back(k);
+    }
+    return prediction;
+}
+
+
+vector<size_t> DPGMM::predict(vector<vector<double>> Y)
+{
+    return predict(array_to_mat(Y));
+}
+
+
 // ________________________________________________________________________________________________
 // Split-merge items
 // ````````````````````````````````````````````````````````````````````````````````````````````````

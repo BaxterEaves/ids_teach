@@ -24,6 +24,7 @@
 #include <cmath>
 #include <vector>
 #include <random>
+#include <limits>
 
 #include "debug.hpp"
 
@@ -39,6 +40,21 @@
 
 // Log(2*pi)
 #define LOG_2PI 1.83787706640934533908193770912475883960723876953125
+
+
+static size_t argmax(const std::vector<double> &X){
+    double maxval = -std::numeric_limits<double>::infinity();
+    size_t arg = 0;
+    size_t idx = 0;
+    for(auto &x : X){
+        if (x > maxval){
+            maxval = x;
+            arg = idx;
+        }
+        ++idx;
+    }
+    return arg;
+}
 
 
 static arma::mat array_to_mat(std::vector<std::vector<double>> X){
