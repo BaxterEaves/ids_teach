@@ -241,7 +241,7 @@ def full_hillenbrand_to_dict(filename=DEFAULT_HILLENBRAND):
     return data_out
 
 
-def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
+def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False, print_latex=False):
     '''
     Generates a Teacher-ready model from the Hillenbrand data.
 
@@ -306,6 +306,41 @@ def gen_model(which_phonemes=None, n_per_phoneme=1, erb=False, f3=False):
 
     if f3:
         model['d'] = 3
+
+    if print_latex:
+        to_df = []
+        def float_formatter(x):
+            return '%1.2f' % x
+        num_formants = 3 if f3 else 2
+
+        for i, phoneme in enumerate(which_phonemes):
+            phoneme_data = {}
+            column_order = ['IPA', 'e.g.']
+            formatters = {}
+            # means
+            phoneme_data['IPA'] = hillenbrand_data()[phoneme]['unicode']
+            phoneme_data['e.g.'] = hillenbrand_data()[phoneme]['example']
+
+            for formant in range(num_formants):
+                phoneme_data['M F%i' % (formant+1)] = model['parameters'][i][0][formant]
+                column_order += ['M F%i' % (formant+1)]
+                formatters['M F%i' % (formant+1)] = float_formatter
+
+            for formant in range(num_formants):
+                phoneme_data['V F%i' % (formant+1)] = model['parameters'][i][1][formant, formant]
+                column_order += ['V F%i' % (formant+1)]
+                formatters['V F%i' % (formant+1)] = float_formatter
+
+            for fa, fb in it.combinations(range(num_formants), 2):
+                t = 'V F%i-F%i' % (fa+1, fb+1)
+                column_order += [t]
+                formatters[t] = float_formatter
+                phoneme_data[t] = model['parameters'][i][1][fa, fb]
+
+            to_df.append(phoneme_data)
+
+        df = pd.DataFrame(to_df)
+        print(df.to_latex(index=False, columns=column_order, formatters=formatters))
 
     return model, which_phonemes
 
