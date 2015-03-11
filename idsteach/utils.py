@@ -155,10 +155,8 @@ def flatten_niw_model(target_model, data_model):
 
     mu_0 = np.copy(data_model.mu_0[:2])
     lambda_0 = np.copy(data_model.lambda_0[:2, :2])
-    nu_0 = 3
-    kappa_0 = 1
 
-    data_model = NormalInverseWishart(**dict(mu_0=mu_0, kappa_0=kappa_0, nu_0=nu_0, lambda_0=lambda_0))
+    data_model = NormalInverseWishart(**dict(mu_0=mu_0, lambda_0=lambda_0, kappa_0=1., nu_0=3.))
 
     return target_model, data_model
 
