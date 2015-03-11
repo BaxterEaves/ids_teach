@@ -15,13 +15,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.cluster import KMeans
 from sklearn import svm
 from sklearn.mixture import GMM
-from sklearn.mixture import VBGMM
-from sklearn.mixture import DPGMM as DPGMM_sk
 from sklearn import metrics
-from math import log
 import multiprocessing as mp
 from idsteach import ids
 from idsteach import utils
@@ -29,7 +25,6 @@ from idsteach import utils
 from scipy.stats import ks_2samp
 from scipy.stats import ttest_ind
 
-from idsteach.dpgmm import DPGMM
 from idsteach.fastniw import PyDPGMM
 
 import pandas as pd
@@ -37,7 +32,6 @@ import numpy as np
 
 import pickle
 import random
-import time
 import sys
 import os
 
@@ -82,13 +76,15 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
     """
     data_model.validate_target_model(target_model)
 
-    columns = ['mean_{ADS}', 'mean_{OPT}', 'std_{ADS}', 'std_{OPT}']
+    columns = ['mean_{ADS}', 'mean_{OPT}', 'mean_{CROSS}', 'std_{ADS}', 'std_{OPT}', 'std_{CROSS}']
     keys = algorithm_list
 
     ari_orig_mean = __prep_result_holder(len(n_per_cat))
     ari_orig_std = __prep_result_holder(len(n_per_cat))
     ari_opt_mean = __prep_result_holder(len(n_per_cat))
     ari_opt_std = __prep_result_holder(len(n_per_cat))
+    ari_cross_mean = __prep_result_holder(len(n_per_cat))
+    ari_cross_std = __prep_result_holder(len(n_per_cat))
 
     data_output = dict()
 
@@ -99,10 +95,12 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
         plt.show()
 
     for j, n_per in enumerate(n_per_cat):
-        print("Running evaluations for {0} examples per category for {1} runs.".format(n_per, n_runs))
+        print("Running evaluations for {0} examples per category for {1} "
+              "runs.".format(n_per, n_runs))
         data_output[n_per] = dict()
         res_orig_n = __prep_result_holder(n_runs)
         res_opt_n = __prep_result_holder(n_runs)
+        res_cross_n = __prep_result_holder(n_runs)
 
         # construct args. seed the rng for each processor. I was having trouble with the numpy rng
         # using the same seed across cores.
@@ -113,12 +111,15 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
         pool = mp.Pool()
         pool.daemon = True
         res = pool.map(__eval_all_mp, args)
-        for i, (orig_res, opt_res, z_true) in enumerate(res):
+        for i, (orig_res, opt_res, cross_res, z_true) in enumerate(res):
             for alg in algorithm_list:
                 res_orig_n[alg]['ari'][i] = orig_res[alg][0]
                 res_opt_n[alg]['ari'][i] = opt_res[alg][0]
+                res_cross_n[alg]['ari'][i] = cross_res[alg][0]
+
                 res_orig_n[alg]['z'][i] = orig_res[alg][1]
                 res_opt_n[alg]['z'][i] = opt_res[alg][1]
+                res_cross_n[alg]['z'][i] = cross_res[alg][1]
 
         print(' ')
 
@@ -127,19 +128,25 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
             ari_orig_std[alg][j] = np.std(res_orig_n[alg]['ari'])
             ari_opt_mean[alg][j] = np.mean(res_opt_n[alg]['ari'])
             ari_opt_std[alg][j] = np.std(res_opt_n[alg]['ari'])
+            ari_cross_mean[alg][j] = np.mean(res_cross_n[alg]['ari'])
+            ari_cross_std[alg][j] = np.std(res_cross_n[alg]['ari'])
 
         # build table
         table_data = np.zeros((len(keys), len(columns)))
         for row, alg in enumerate(keys):
             table_data[row, 0] = ari_orig_mean[alg][j]
             table_data[row, 1] = ari_opt_mean[alg][j]
-            table_data[row, 2] = ari_orig_std[alg][j]
-            table_data[row, 3] = ari_opt_std[alg][j]
+            table_data[row, 2] = ari_cross_mean[alg][j]
+
+            table_data[row, 3] = ari_orig_std[alg][j]
+            table_data[row, 4] = ari_opt_std[alg][j]
+            table_data[row, 5] = ari_cross_std[alg][j]
 
         df = pd.DataFrame(table_data, index=keys, columns=columns)
         data_output[n_per]['dataframe'] = df
         data_output[n_per]['res_optimal'] = res_opt_n
         data_output[n_per]['res_original'] = res_orig_n
+        data_output[n_per]['res_cross'] = res_cross_n
         data_output[n_per]['z_true'] = z_true
         print(df)
 
@@ -193,14 +200,17 @@ def __eval_all(opt_data, target_model, data_model, n_per_cat, do_plot=False):
         plt.title('Optimal data (test)')
         plt.draw()
 
-    print(".", end="")
+    print("<", end="")
     sys.stdout.flush()
     res_orig = __eval_set(data_train_orig, z_train_orig, data_test_orig, z_test_orig, data_model)
-    print("`", end="")
+    print("|", end="")
     sys.stdout.flush()
     res_opt = __eval_set(data_train_opt, z_train_opt, data_test_opt, z_test_opt, data_model)
+    print(">", end="")
+    sys.stdout.flush()
+    res_cross = __eval_set(data_train_opt, z_train_opt, data_test_orig, z_test_orig, data_model)
 
-    return res_orig, res_opt, z_test_opt
+    return res_orig, res_opt, res_cross, z_test_opt
 
 
 def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
@@ -222,26 +232,21 @@ def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
 
     # fixed-categoty algorithms
     K = max(train_labels)+1
-    res_kmeans = __eval_kmeans(train_data, train_labels, K)
-    res_gmm = __eval_gmm(train_data, train_labels, K)
+    res_gmm = __eval_gmm(train_data, train_labels, K, test_data=test_data, test_labels=test_labels)
 
     # variational algorithms
-    # res_vpgmm = __eval_vbgmm(train_data, train_labels, alpha=1.0)
-    res_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0)
+    res_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0,
+                             test_data=test_data, test_labels=test_labels)
 
     # labeled-set algorithms
     res_logit = __eval_logit(train_data, train_labels, test_data, test_labels)
-    res_svm_linear = __eval_svm(train_data, train_labels, test_data,
-                                              test_labels, kernel='linear')
-    # res_svm_rbf = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='rbf')
+    res_svm_linear = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear')
 
     # each entry in res is an (ARI, assgnment vector) tuple
     res = {
         'logit': res_logit,
         'svm_linear': res_svm_linear,
-        'k_means': res_kmeans,
         'gmm': res_gmm,
-        # 'vbgmm': res_vbgmm,
         'dpgmm': res_dpgmm,
     }
 
@@ -300,25 +305,20 @@ def __prep_optimal_data(opt_data, n_per_category):
 # __________________________________________________________________________________________________
 # Algorithms w/ known number of clusters
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
-def __eval_kmeans(data, labels, num_clusters):
-    """
-    Cluster data into num_clusters cluster. Returns a n-length array of cluster assignments.
-    """
-    km = KMeans(n_clusters=num_clusters)
-    km.fit(data)
-    Z = km.predict(data)
-    ari = metrics.adjusted_rand_score(labels, Z)
-    return ari, Z
-
-
-def __eval_gmm(data, labels, num_components):
+def __eval_gmm(data, labels, num_components, test_data=None, test_labels=None):
     """
     Expectation-maximization with a given number of categories
     """
     gmm = GMM(n_components=num_components, n_iter=100)
     gmm.fit(data)
-    Z = gmm.predict(data)
+
+    if test_data is not None and test_labels is not None:
+        Z = gmm.predict(test_data)
+        ari = metrics.adjusted_rand_score(test_labels, Z)
+    else:
+        ari = metrics.adjusted_rand_score(labels, Z)
     ari = metrics.adjusted_rand_score(labels, Z)
+
     return ari, Z
 
 
@@ -355,40 +355,33 @@ def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'
 # to keep around. We need to choose high, but if we choose too high, we have to wait froever.
 # I chose n/k because I want to build in a little as possible.
 # ``````````````````````````````````````````````````````````````````````````````````````````````````
-def __eval_vbgmm(data, labels, alpha=1.0):
-    """
-    Variational inferrence for Gaussian mixture models. Based on dirichlet process.
-    Returns ARI(test_labels, Z)
-    """
-    # k = int(data.shape[0]/float(max(labels)))
-    k = 24
-    vbgmm = VBGMM(alpha=alpha, n_iter=10000, n_components=k, covariance_type='full')
-    vbgmm.fit(data)
-    Z = vbgmm.predict(data)
-    ari = metrics.adjusted_rand_score(labels, Z)
-    return ari, Z
-
-
-def __eval_dpgmm(data, labels, data_model, alpha=1.0):
+def __eval_dpgmm(data, labels, data_model, alpha=1.0, test_data=None, test_labels=None):
     """
     Dirichlet proccess EM for Gaussian mixture models.
     Returns ARI(test_labels, Z)
     """
     dpgmm = PyDPGMM(data_model, data, crp_alpha=alpha, init_mode='single_cluster')
     Z = dpgmm.fit(n_iter=500, sm_prop=.25, sm_burn=50, num_sm_sweeps=2)
-    # Z = dpgmm.fit(n_iter=200, sm_prop=.8, sm_burn=10)
-    ari = metrics.adjusted_rand_score(labels, Z)
+    if test_data is not None and test_labels is not None:
+        Z = dpgmm.predict(test_data)
+        ari = metrics.adjusted_rand_score(test_labels, Z)
+    else:
+        ari = metrics.adjusted_rand_score(labels, Z)
+
     return ari, Z
 
 
+# _________________________________________________________________________________________________
 def ari_subset(data_n, category_list):
     idx = [i for i, zi in enumerate(data_n['z_true']) if zi in category_list]
     z_true = [data_n['z_true'][i] for i in idx]
     res_optimal = dict()
     res_original = dict()
+
     for alg in algorithm_list:
         res_optimal[alg] = np.zeros(len(data_n['res_optimal'][alg]['ari']))
         res_original[alg] = np.zeros(len(data_n['res_original'][alg]['ari']))
+
         for i in range(len(data_n['res_optimal'][alg]['z'])):
             z_opt = [data_n['res_optimal'][alg]['z'][i][z] for z in idx]
             z_orig = [data_n['res_original'][alg]['z'][i][z] for z in idx]
@@ -398,7 +391,7 @@ def ari_subset(data_n, category_list):
     return res_optimal, res_original
 
 
-def plot_single_result(df, ptype, axes):
+def plot_single_result(df, ptype, axes, stat_type='KS'):
 
     def get_clip(x):
         s = np.std(x)
@@ -411,21 +404,48 @@ def plot_single_result(df, ptype, axes):
         ari_orig = df['res_original'][alg]['ari']
         ari_opt = df['res_optimal'][alg]['ari']
 
+        print("KS stat, p {}".format(alg))
         ks_ari, p_ari = ks_2samp(ari_orig, ari_opt)
+        print("\tADS-OPT KS: {}, p: {}".format(ks_ari, p_ari))
+
+        if 'res_cross' in df:
+            ari_cross = df['res_cross'][alg]['ari']
+            ks_ari, p_ari = ks_2samp(ari_orig, ari_cross)
+            print("\tADS-CROSS KS: {}, p: {}".format(ks_ari, p_ari))
+            ks_ari, p_ari = ks_2samp(ari_opt, ari_cross)
+            print("\tOPT-CROSS KS: {}, p: {}".format(ks_ari, p_ari))
+        else:
+            ari_cross = None
+
         if ptype == 'kde':
             clip_orig = get_clip(ari_orig)
             clip_opt = get_clip(ari_opt)
 
             sns.distplot(ari_orig, color=c1, ax=axes[j],
-                         kde_kws=dict(clip=clip_orig, label=(None if j > 0 else 'Original'),
+                         kde_kws=dict(clip=clip_orig, label=(None if j > 0 else 'ADS'),
                                       lw=2),
                          hist_kws=dict(histtype="stepfilled"))
             sns.distplot(ari_opt, color=c2, ax=axes[j],
                          kde_kws=dict(clip=clip_opt, label=None if j > 0 else 'Teaching',
                                       lw=2),
                          hist_kws=dict(histtype="stepfilled"))
-            txt = "KS: %1.4f\np: %1.4f" % (ks_ari, p_ari)
-            axes[j].text(1, .9, txt, ha='right', va='center', transform=axes[j].transAxes, color='#333333')
+            if ari_cross is not None:
+                clip_cross = get_clip(ari_cross)
+                sns.distplot(ari_cross, color=c3, ax=axes[j],
+                             kde_kws=dict(clip=clip_cross, label=None if j > 0 else 'Crossover',
+                                          lw=2),
+                             hist_kws=dict(histtype="stepfilled"))
+
+            if ari_cross is None:
+                tstat, tp = ttest_ind(ari_orig, ari_opt)
+                if stat_type.upper() == 'KS':
+                    txt = "KS: %1.4f\np: %1.4f" % (ks_ari, p_ari)
+                elif stat_type.upper() == 'T':
+                    txt += "\nt: %1.4f\n p: %1.4f" % (tstat, tp)
+                else:
+                    raise ValueError("Invalid stat_type: {}".format(stat_type))
+                axes[j].text(1, .95, txt, ha='right', va='top', transform=axes[j].transAxes,
+                             color='#333333')
 
             x_l = axes[j].get_xlim()[0]
             x_u = axes[j].get_xlim()[1]
@@ -440,87 +460,73 @@ def plot_single_result(df, ptype, axes):
                 axes[j].set_ylabel('Density')
                 axes[j].legend(loc=2)
         elif ptype == 'violin':
-            sns.violinplot([ari_orig, ari_opt], positions=[1, 2], ax=axes.flat[j],
-                           names=['original', 'optimized'], alpha=.5)
+            aris = [ari_orig, ari_opt]
+            names = ['ADS', 'Teaching']
+            if ari_cross is not None:
+                aris += [ari_cross]
+                names += ['Crossover']
+            sns.violinplot(aris, positions=1, ax=axes.flat[j], names=names, alpha=.5)
 
             axes[j].set_ylabel('ARI')
-        tstat, tp = ttest_ind(ari_orig, ari_opt)
-        print("{0} T: {1}, p = {2}".format(alg.upper(), tstat, tp))
         axes[j].set_title(alg.upper())
 
     return axes
 
-def plot_compare(filename_top, filename_bottom, N, ylabel_t='Density', ylabel_b='Density', figwidth=15.):
-    type = 'kde'
 
-    color_ads = '#DA0017'
-    color_opt = '#2C69A9'
-    f, axes = plt.subplots(2, len(algorithm_list), figsize=(figwidth, figwidth/2.5))
-    axes_top = axes[0, :].tolist()
-    axes_bottom = axes[1, :].tolist()
+def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS'):
+    if ylabels is None:
+        ylabels = ['Density']*len(filenames)
 
-    df_top = pickle.load(open(filename_top, 'rb'))[N]
-    df_bottom = pickle.load(open(filename_bottom, 'rb'))[N]
+    if isinstance(Ns, float):
+        Ns = [Ns]*len(filenames)
 
-    axes_top = plot_single_result(df_top, type, axes_top)
-    axes_bottom = plot_single_result(df_bottom, type, axes_bottom)
+    c1, c2, c3 = sns.color_palette("Set1", 3)
 
-    x_min = []
-    x_max = []
-    y_max = []
-    for ax in axes_top + axes_bottom:
-        y_max.append(ax.get_ylim()[1])
-        x_min.append(ax.get_xlim()[0])
-        x_max.append(ax.get_xlim()[1])
+    ptype = 'kde'
 
-    for i, (ax_t, ax_b) in enumerate(zip(axes_top, axes_bottom)):
-        x_l = min(ax_t.get_xlim()[0], ax_b.get_xlim()[0])
-        x_u = max(ax_t.get_xlim()[1], ax_b.get_xlim()[1])
+    f, axes = plt.subplots(len(filenames), len(algorithm_list), figsize=(figwidth, figwidth/2.5))
+
+    dfs = [pickle.load(open(fname, 'rb'))[n] for n, fname in zip(Ns, filenames)]
+
+    axes = [plot_single_result(df, ptype, axes[i, :].tolist(), stat_type=stat_type) for i, df
+            in enumerate(dfs)]
+
+    for i, axes_zip in enumerate(zip(*tuple(axes))):
+        x_l = min([ax.get_xlim()[0] for ax in axes_zip])
+        x_u = max([ax.get_xlim()[1] for ax in axes_zip])
         xstp = (x_u - x_l)/3.
         xticks = [x_l, x_l + xstp, x_l + xstp*2, x_u]
         xticks = [round(tick, 2) for tick in xticks]
-        ax_t.set_xlim([x_l, x_u])
-        ax_t.set_ylim([0, max(y_max)])
-        ax_t.set_xlabel('')
-        ax_t.set_xticks(xticks)
-        ax_t.set_xticklabels([])
 
-        ax_b.set_title('')
-        ax_b.set_xlim([x_l, x_u])
-        ax_b.set_xticks(xticks)
-        ax_b.set_ylim([0, max(y_max)])
-        ax_b.set_xlabel('ARI')
-        # ax_b.set_xticklabels([])
-        if i > 0:
-            ax_t.set_yticklabels([])
-            ax_t.set_ylabel('')
+        for j, ax in enumerate(axes_zip):
+            ax.set_xlim([x_l, x_u])
+            ax.set_xticks(xticks)
+            if i > 0:
+                ax.set_yticklabels([])
+                ax.set_ylabel('')
+            else:
+                ax.set_ylabel(ylabels[j])
 
-            ax_b.set_yticklabels([])
-            ax_b.set_ylabel('')
-        else:
-            ax_t.set_ylabel(ylabel_t)
-            ax_b.set_ylabel(ylabel_b)
-            ax_b.legend().set_visible(False)
+            if j < len(filenames)-1:
+                ax.set_xticklabels([])
+                ax.set_xlabel('')
+            if j != 0:
+                ax.set_title('')
 
-    for i, alg in enumerate(algorithm_list):
-        mot = df_top['ari_original'][alg].mean()
-        mtt = df_top['ari_optimal'][alg].mean()
+    for i, axes_row in enumerate(axes):
+        y_max = max([ax.get_ylim()[1] for ax in axes_row])
+        for j, alg in enumerate(algorithm_list):
+            mot = dfs[i]['res_original'][alg]['ari'].mean()
+            mtt = dfs[i]['res_optimal'][alg]['ari'].mean()
 
-        axes_top[i].plot([mot, mot], [0, max(y_max)], lw=2, color=color_ads, ls='--')
-        axes_top[i].plot([mtt, mtt], [0, max(y_max)], lw=2, color=color_opt, ls='--')
+            axes_row[j].plot([mot, mot], [0, y_max], lw=2, color=c1, ls='--')
+            axes_row[j].plot([mtt, mtt], [0, y_max], lw=2, color=c2, ls='--')
 
-        mob = df_bottom['ari_original'][alg].mean()
-        mtb = df_bottom['ari_optimal'][alg].mean()
+            if 'res_cross' in dfs[i]:
+                mct = dfs[i]['res_cross'][alg]['ari'].mean()
+                axes_row[j].plot([mct, mct], [0, y_max], lw=2, color=c3, ls='--')
 
-        axes_bottom[i].plot([mob, mob], [0, max(y_max)], lw=2, color=color_ads, ls='--')
-        axes_bottom[i].plot([mtb, mtb], [0, max(y_max)], lw=2, color=color_opt, ls='--')
-    # for i, ax in enumerate(axes_bottom):
-    #     ax.set_xlim([min(x_min), max(x_max)])
-    #     ax.set_ylim([0, max(y_max)])
-    #     ax.set_title('')
-    #     if i > 0:
-    #         ax.set_yticklabels([])
-    #         ax.set_ylabel('')
+            axes_row[j].set_ylim([0, y_max])
 
     return f, axes
 
@@ -556,12 +562,10 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
 # `````````````````````````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
     import argparse
-    from idsteach.teacher import Teacher
     from idsteach.models import NormalInverseWishart
-    import numpy as np
 
     parser = argparse.ArgumentParser(description='Run examples')
-    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+',help='list of number '+
+    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+', help='list of number ' +
                         'of exampler per phoneme')
     parser.add_argument('--num_runs', type=int, default=100, help='Number of runs to average over.')
     parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default)"
@@ -588,7 +592,7 @@ if __name__ == '__main__':
         target_model, data_model = utils.flatten_niw_model(target_model, data_model)
 
     if args.multirun:
-        if ars.matlab_data:
+        if args.matlab_data:
             dirname = os.path.join('../data', 'ml_runs')
             data = utils.multiple_matlab_csv_to_teacher_data(dirname)
         else:
@@ -601,5 +605,6 @@ if __name__ == '__main__':
             dirname = os.path.join('../data', 'ptn_runs')
             data = utils.multiple_pandas_to_teacher_data(dirname, remove_f3=args.flatten)
 
-    algcomp(data, target_model, data_model, args.num_examples, args.num_runs, filename=args.filename)
+    algcomp(data, target_model, data_model, args.num_examples, args.num_runs,
+            filename=args.filename)
     plot_result(args.filename, args.plot_type, base_filename=args.base_figname)
