@@ -377,8 +377,7 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1], nst
         color_ads = 'gray'
         font_color = 'white'
     else:
-        color_ads = '#DA0017'
-        color_opt = '#2C69A9'
+        color_ads, _, color_opt = sns.color_palette('colorblind', 3)
         font_color = 'white'
 
     def cov_filter_2d(cov, formants):

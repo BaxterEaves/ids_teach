@@ -398,7 +398,7 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
         m = np.mean(x)
         return [m-4.0*s, m+4.0*s]
 
-    c1, c2, c3 = sns.color_palette("Set1", 3)
+    c1, c3, c2 = sns.color_palette("colorblind", 3)
 
     for j, alg in enumerate(algorithm_list):
         ari_orig = df['res_original'][alg]['ari']
@@ -421,18 +421,18 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
             clip_orig = get_clip(ari_orig)
             clip_opt = get_clip(ari_opt)
 
-            sns.distplot(ari_orig, color=c1, ax=axes[j],
+            sns.distplot(ari_orig, color=c1, ax=axes[j], vertical=True,
                          kde_kws=dict(clip=clip_orig, label=(None if j > 0 else 'ADS'),
                                       lw=2),
                          hist_kws=dict(histtype="stepfilled"))
-            sns.distplot(ari_opt, color=c2, ax=axes[j],
+            sns.distplot(ari_opt, color=c2, ax=axes[j], vertical=True,
                          kde_kws=dict(clip=clip_opt, label=None if j > 0 else 'Teaching',
                                       lw=2),
                          hist_kws=dict(histtype="stepfilled"))
             if ari_cross is not None:
                 clip_cross = get_clip(ari_cross)
-                sns.distplot(ari_cross, color=c3, ax=axes[j],
-                             kde_kws=dict(clip=clip_cross, label=None if j > 0 else 'Crossover',
+                sns.distplot(ari_cross, color=c3, ax=axes[j], vertical=True,
+                             kde_kws=dict(clip=clip_cross, label=None if j > 0 else 'Transfer',
                                           lw=2),
                              hist_kws=dict(histtype="stepfilled"))
 
@@ -441,35 +441,35 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
                 if stat_type.upper() == 'KS':
                     txt = "KS: %1.4f\np: %1.4f" % (ks_ari, p_ari)
                 elif stat_type.upper() == 'T':
-                    txt += "\nt: %1.4f\n p: %1.4f" % (tstat, tp)
+                    txt = "\nt: %1.4f\n p: %1.4f" % (tstat, tp)
                 else:
                     raise ValueError("Invalid stat_type: {}".format(stat_type))
                 axes[j].text(1, .95, txt, ha='right', va='top', transform=axes[j].transAxes,
                              color='#333333')
 
-            x_l = axes[j].get_xlim()[0]
-            x_u = axes[j].get_xlim()[1]
-            xstp = (x_u - x_l)/3.
-            xticks = [x_l, x_l + xstp, x_l + xstp*2, x_u]
-            xticks = [round(tick, 2) for tick in xticks]
-            axes[j].set_xlim([x_l, x_u])
-            axes[j].set_xlabel('')
-            axes[j].set_xticks(xticks)
+            y_l = axes[j].get_ylim()[0]
+            y_u = axes[j].get_ylim()[1]
+            ystp = (y_u - y_l)/3.
+            yticks = [y_l, y_l + ystp, y_l + ystp*2, y_u]
+            yticks = [round(tick, 2) for tick in yticks]
+            axes[j].set_ylim([y_l, y_u])
+            axes[j].set_ylabel('')
+            axes[j].set_yticks(yticks)
             if j == 0:
-                axes[j].set_xlabel('ARI')
-                axes[j].set_ylabel('Density')
+                axes[j].set_ylabel('ARI')
+                axes[j].set_xlabel('Density')
                 axes[j].legend(loc=2)
         elif ptype == 'violin':
             aris = [ari_orig, ari_opt]
             names = ['ADS', 'Teaching']
             if ari_cross is not None:
                 aris += [ari_cross]
-                names += ['Crossover']
+                names += ['Transfer']
             sns.violinplot(aris, positions=1, ax=axes.flat[j], names=names, alpha=.5)
 
             axes[j].set_ylabel('ARI')
         axes[j].set_title(alg.upper())
-
+    print(' ')
     return axes
 
 
@@ -480,7 +480,7 @@ def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS'):
     if isinstance(Ns, float):
         Ns = [Ns]*len(filenames)
 
-    c1, c2, c3 = sns.color_palette("Set1", 3)
+    c1, c3, c2 = sns.color_palette("colorblind", 3)
 
     ptype = 'kde'
 
@@ -488,45 +488,49 @@ def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS'):
 
     dfs = [pickle.load(open(fname, 'rb'))[n] for n, fname in zip(Ns, filenames)]
 
-    axes = [plot_single_result(df, ptype, axes[i, :].tolist(), stat_type=stat_type) for i, df
-            in enumerate(dfs)]
+    axes = tuple([plot_single_result(df, ptype, axes[i, :].tolist(), stat_type=stat_type) for i, df
+                 in enumerate(dfs)])
 
-    for i, axes_zip in enumerate(zip(*tuple(axes))):
-        x_l = min([ax.get_xlim()[0] for ax in axes_zip])
-        x_u = max([ax.get_xlim()[1] for ax in axes_zip])
-        xstp = (x_u - x_l)/3.
-        xticks = [x_l, x_l + xstp, x_l + xstp*2, x_u]
-        xticks = [round(tick, 2) for tick in xticks]
+    y_l = min([min([ax.get_ylim()[0] for ax in axis_row]) for axis_row in axes])
+    y_u = max([max([ax.get_ylim()[1] for ax in axis_row]) for axis_row in axes])
 
-        for j, ax in enumerate(axes_zip):
-            ax.set_xlim([x_l, x_u])
-            ax.set_xticks(xticks)
-            if i > 0:
+    ystp = (y_u - y_l)/3.
+    yticks = [y_l, y_l + ystp, y_l + ystp*2, y_u]
+    yticks = [round(tick, 2) for tick in yticks]
+
+    for row, axis_row in enumerate(axes):
+        axis_row[0].set_ylabel(ylabels[row])
+        for col, ax in enumerate(axis_row):
+            ax.set_ylim([y_l, y_u])
+            ax.set_yticks(yticks)
+
+            if col != 0:
                 ax.set_yticklabels([])
                 ax.set_ylabel('')
-            else:
-                ax.set_ylabel(ylabels[j])
 
-            if j < len(filenames)-1:
+    for col, axis_col in enumerate(zip(*axes)):
+        x_l = 0
+        x_u = max([ax.get_xlim()[1] for ax in axis_col])
+        alg = algorithm_list[col]
+
+        for row, ax in enumerate(axis_col):
+            ax.set_xlim([x_l, x_u])
+            if row != len(axis_col)-1:
                 ax.set_xticklabels([])
                 ax.set_xlabel('')
-            if j != 0:
+
+            if row != 0:
                 ax.set_title('')
 
-    for i, axes_row in enumerate(axes):
-        y_max = max([ax.get_ylim()[1] for ax in axes_row])
-        for j, alg in enumerate(algorithm_list):
-            mot = dfs[i]['res_original'][alg]['ari'].mean()
-            mtt = dfs[i]['res_optimal'][alg]['ari'].mean()
+            mot = dfs[row]['res_original'][alg]['ari'].mean()
+            mtt = dfs[row]['res_optimal'][alg]['ari'].mean()
 
-            axes_row[j].plot([mot, mot], [0, y_max], lw=2, color=c1, ls='--')
-            axes_row[j].plot([mtt, mtt], [0, y_max], lw=2, color=c2, ls='--')
+            ax.plot([0, x_u], [mot, mot], lw=2, color=c1, ls='--')
+            ax.plot([0, x_u], [mtt, mtt], lw=2, color=c2, ls='--')
 
-            if 'res_cross' in dfs[i]:
-                mct = dfs[i]['res_cross'][alg]['ari'].mean()
-                axes_row[j].plot([mct, mct], [0, y_max], lw=2, color=c3, ls='--')
-
-            axes_row[j].set_ylim([0, y_max])
+            if 'res_cross' in dfs[row]:
+                mct = dfs[row]['res_cross'][alg]['ari'].mean()
+                ax.plot([0, x_u], [mct, mct], lw=2, color=c3, ls='--')
 
     return f, axes
 
