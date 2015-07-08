@@ -30,23 +30,28 @@ from scipy.special import gammaln
 from numpy.linalg import slogdet
 from numpy.linalg import solve
 from random import shuffle
-from scipy import linalg
 from numpy import trace
 from math import log
 
 ITERATIONS = 1000
 
 
+def cohen_d(a, b):
+    return (np.mean(a) - np.mean(b)) / (np.sqrt((np.std(a, ddof=1.) ** 2. +
+        np.std(b, ddof=1.) ** 2.) / 2.))
+
+
 def dist(a, b):
     """
     Euclidian distance between two numpy arrays
 
-    Example:
-        >>> import numpy as np
-        >>> a = np.array([1.2, -3.4])
-        >>> b = np.array([0.0, 6.8])
-        >>> dist(a, b)
-        10.270345661174213
+    Examples
+    --------
+    >>> import numpy as np
+    >>> a = np.array([1.2, -3.4])
+    >>> b = np.array([0.0, 6.8])
+    >>> dist(a, b)
+    10.270345661174213
     """
     return np.sum((a-b)**2.0)**.5
 
@@ -55,22 +60,28 @@ def invwish_logpdf(X, S, df):
     """
     Calculate the log of the Inverse-Wishart pdf
 
-    Inputs:
-        X (numpy.ndarray): Square array
-        S (numpy.ndarray): Square array, scale matrix parameter
-        df (float): Degrees of freedom
+    Parameters
+    ----------
+    X : numpy.ndarray
+        Square array
+    S : numpy.ndarray
+        Square array, scale matrix parameter
+    df : float
+        Degrees of freedom
 
-    Example:
-        >>> import numpy as np
-        >>> X = np.array([[0.275540735784, -0.01728072206], [-0.01728072206, 0.17214874805]])
-        >>> invwish_logpdf(X, np.eye(2, 2), 2)
-        0.35682871083019663
-        >>> invwish_logpdf(X, X, 3.436)
-        0.81037760291240524
+    Examples
+    --------
+    >>> import numpy as np
+    >>> X = np.array([[0.275540735784, -0.01728072206], [-0.01728072206, 0.17214874805]])
+    >>> invwish_logpdf(X, np.eye(2, 2), 2)
+    0.35682871083019663
+    >>> invwish_logpdf(X, X, 3.436)
+    0.81037760291240524
     """
     d = X.shape[0]
     if df < d:
-        raise ValueError('df must be greater than or equal to the number of dimensions of S')
+        raise ValueError('df must be greater than or equal to the number of '
+                         ' dimensions of S')
     if d != X.shape[1]:
         raise ValueError('X must be square.')
     if S.shape[0] != d or S.shape[1] != d:
@@ -87,9 +98,11 @@ def invwish_logpdf(X, S, df):
 
 def hz_to_erb(f):
     """
-    Converts a numpy array, f, full of data measured in Hz to ERB according to
-    B.C.J. Moore and B.R. Glasberg, "Suggested formulae for calculating auditory-filter bandwidths
-        and excitation patterns" Journal of the Acoustical Society of America 74: 750-753, 1983.
+    Converts a numpy array, f, full of data measured in Hz to ERB according to:
+
+    B.C.J. Moore and B.R. Glasberg, "Suggested formulae for calculating 
+        auditory-filter bandwidths and excitation patterns" Journal of the 
+        Acoustical Society of America 74: 750-753, 1983.
     http://en.wikipedia.org/wiki/Equivalent_rectangular_bandwidth
     """
     return 6.23*(f**2) + 93.9*f + 28.52
@@ -99,20 +112,21 @@ def jitter_data(X, std):
     """
     Add random Gaussian noise (with standard deviation std) to X.
 
-    Example:
-        >>> import numpy as np
-        >>> np.random.seed(1701)
-        >>> X = np.zeros((4, 2))
-        >>> X
-        array([[ 0.,  0.],
-               [ 0.,  0.],
-               [ 0.,  0.],
-               [ 0.,  0.]])
-        >>> jitter_data(X, 1.0)
-        array([[-2.45673077,  2.37595165],
-               [-0.9699642 , -0.50216492],
-               [-1.08208145, -1.5184966 ],
-               [-0.70900708,  0.42912647]])
+    Examples
+    --------
+    >>> import numpy as np
+    >>> np.random.seed(1701)
+    >>> X = np.zeros((4, 2))
+    >>> X
+    array([[ 0.,  0.],
+           [ 0.,  0.],
+           [ 0.,  0.],
+           [ 0.,  0.]])
+    >>> jitter_data(X, 1.0)
+    array([[-2.45673077,  2.37595165],
+           [-0.9699642 , -0.50216492],
+           [-1.08208145, -1.5184966 ],
+           [-0.70900708,  0.42912647]])
 
     """
     if not isinstance(X, np.ndarray):
@@ -156,18 +170,21 @@ def flatten_niw_model(target_model, data_model):
     mu_0 = np.copy(data_model.mu_0[:2])
     lambda_0 = np.copy(data_model.lambda_0[:2, :2])
 
-    data_model = NormalInverseWishart(**dict(mu_0=mu_0, lambda_0=lambda_0, kappa_0=1., nu_0=3.))
+    data_model = NormalInverseWishart(**dict(mu_0=mu_0, lambda_0=lambda_0,
+                                             kappa_0=1., nu_0=3.))
 
     return target_model, data_model
 
 
 def matlab_csv_to_teacher_data(dirname):
     """
-    Utility to convert data from the old matlab code to something the new hotness (this code) can
-    use.
+    Utility to convert data from the old matlab code to something the new
+    hotness (this code) can use.
     """
-    samples = np.genfromtxt(os.path.join(dirname, 'samples.csv'), dtype=float, delimiter=",")
-    labels = np.genfromtxt(os.path.join(dirname, 'labels.csv'), dtype=int, delimiter=",")
+    samples = np.genfromtxt(os.path.join(dirname, 'samples.csv'), dtype=float,
+                            delimiter=",")
+    labels = np.genfromtxt(os.path.join(dirname, 'labels.csv'), dtype=int,
+                           delimiter=",")
     data = [None]*max(labels)  # matlab is 1-indexed, so no need to add 1
     for i, z in enumerate(labels):
         if data[z-1] is None:
@@ -183,10 +200,11 @@ def multiple_pandas_to_teacher_data(dirname, remove_f3=False):
     data = []
     num_runs = 10
     for d in range(1, num_runs+1):
-        filename = os.path.join(basedir, '%i'%d, 'data_f3_full_%i.pkl' % (d,))
+        filename = os.path.join(basedir, '%i' % d,
+                                'data_f3_full_%i.pkl' % (d,))
         full_data = pickle.load(open(filename, 'rb'))
         if remove_f3:
-            full_data = [phoneme_data[:,:2] for phoneme_data in full_data]
+            full_data = [phoneme_data[:, :2] for phoneme_data in full_data]
         if d == 1:
             data = [phoneme_data for phoneme_data in full_data]
         else:
@@ -197,8 +215,8 @@ def multiple_pandas_to_teacher_data(dirname, remove_f3=False):
 
 def multiple_matlab_csv_to_teacher_data(short_runs_dirname):
     """
-    Utility to convert data from the old matlab code to something the new hotness (this code) can
-    use.
+    Utility to convert data from the old matlab code to something the new
+    hotness (this code) can use.
     """
     subdirname = 'Run-'
     data = None
@@ -215,7 +233,7 @@ def multiple_matlab_csv_to_teacher_data(short_runs_dirname):
         data_length += run_data[0].shape[0]
 
     for i, phoneme_data in enumerate(data):
-        assert phoneme_data.shape[0] == data_length, "Data was imporperly constructed."
+        assert phoneme_data.shape[0] == data_length
 
     return data
 
@@ -224,18 +242,20 @@ def bell_number(n):
     """
     Returns the nth bell number. Uses approximation.
 
-    Example:
-        >>> # generate bell({0,1,...,13})
-        >>> [bell_number(n) for n in range(14)]
-        [1, 1, 2, 5, 15, 52, 203, 877, 4140, 21147, 115975, 678570, 4213597, 27644437]
+    Examples
+    --------
+    >>> # generate bell({0,1,...,12})
+    >>> [bell_number(n) for n in range(13)]
+    [1, 1, 2, 5, 15, 52, 203, 877, 4140, 21147, 115975, 678570, 4213597]
     """
     return int((1/math.e) * sum([(k**n)/(math.factorial(k)) for k in range(ITERATIONS)])+.5)
 
 
 def next_partition(Z, k, h):
     """
-    Generates the next partition, Z, and histogram, h given the curerent partition and histogram
-    given the pseudo counts, k. This function will mutate Z, k, and h.
+    Generates the next partition, Z, and histogram, h given the current
+    partition and histogram given the pseudo counts, k. This function will
+    mutate Z, k, and h.
     """
     n = len(Z)
     for i in range(n-1, 0, -1):
@@ -268,19 +288,22 @@ def parition_generator(n):
     """
     Generates partitionings of n objects into 1 to n partitions
 
-    Returns:
-        numpy.ndarray<int>: a n-length array where entry, i, is an integer indicating to which
-            partition the ith object is assigned.
+    Returns
+    -------
+    Z : numpy.ndarray<int>
+        a n-length array where entry, i, is an integer indicating to which
+        partition the ith object is assigned.
 
-    Examples:
-        >>> Z = parition_generator(3)
-        >>> [z for z in Z]
-        [array([0, 1, 2]), array([0, 1, 2]), array([0, 1, 2]), array([0, 1, 2]), array([0, 1, 2])]
-        >>> Z = parition_generator(8)
-        >>> len([z for z in Z])  # this should be the same as bell_number(8)
-        4140
-        >>> bell_number(8)
-        4140
+    Examples
+    --------
+    >>> Z = parition_generator(3)
+    >>> [z for z in Z]
+    [array([0, 1, 2]), array([0, 1, 2]), array([0, 1, 2]), array([0, 1, 2]), array([0, 1, 2])]
+    >>> Z = parition_generator(8)
+    >>> len([z for z in Z])  # this should be the same as bell_number(8)
+    4140
+    >>> bell_number(8)
+    4140
     """
     # generator
     k = np.zeros(n, dtype=np.dtype(int))
@@ -292,9 +315,7 @@ def parition_generator(n):
 
 
 def pflip(P):
-    """
-    Multinomial draw from a vector P of probabilities
-    """
+    """ Multinomial draw from a vector P of probabilities """
     if len(P) == 1:
         return 0
 
@@ -325,9 +346,7 @@ def lcrp(N, Nk, alpha):
 
 
 def lpflip(P):
-    """
-    Multinomial draw from a vector P of log probabilities
-    """
+    """ Multinomial draw from a vector P of log probabilities """
     if len(P) == 1:
         return 0
 
@@ -369,7 +388,8 @@ def crp_gen(N, alpha):
         elif assignment < K:
             Nk[assignment] += 1
         else:
-            raise ValueError("invalid assignment: %i, max=%i" % (assignment, K))
+            raise ValueError("invalid assignment: %i, max=%i" %
+                             (assignment, K))
 
         partition[i] = assignment
 
@@ -384,9 +404,10 @@ def crp_gen(N, alpha):
 
     return np.array(partition), Nk, K
 
-# _________________________________________________________________________________________________
+
+# _____________________________________________________________________________
 # Plot utils
-# `````````````````````````````````````````````````````````````````````````````````````````````````
+# `````````````````````````````````````````````````````````````````````````````
 def plot_data_2d(teacher_data, target_model):
     """
     TODO: Fill in
@@ -411,14 +432,21 @@ def plot_cov_ellipse(cov, pos, nstd=2, ax=None, **kwargs):
 
     Parameters
     ----------
-        cov : The 2x2 covariance matrix to base the ellipse on
-        pos : The location of the center of the ellipse. Expects a 2-element
-            sequence of [x0, y0].
-        nstd : The radius of the ellipse in numbers of standard deviations.
-            Defaults to 2 standard deviations.
-        ax : The axis that the ellipse will be plotted on. Defaults to the
-            current axis.
-        Additional keyword arguments are pass on to the ellipse patch.
+    cov : numpy.ndarray
+        The 2x2 covariance matrix to base the ellipse on
+    pos : [a, b]
+        The location of the center of the ellipse. Expects a 2-element
+        sequence of [x0, y0].
+    nstd : float
+        The radius of the ellipse in numbers of standard deviations.
+        Defaults to 2 standard deviations.
+    ax : pyplot.axis
+        The axis that the ellipse will be plotted on. Defaults to the current
+        axis.
+
+    Notes
+    -----
+    Additional keyword arguments are pass on to the ellipse patch.
 
     Returns
     -------
@@ -428,13 +456,13 @@ def plot_cov_ellipse(cov, pos, nstd=2, ax=None, **kwargs):
     def eigsorted(cov):
         vals, vecs = np.linalg.eigh(cov)
         order = vals.argsort()[::-1]
-        return vals[order], vecs[:,order]
+        return vals[order], vecs[:, order]
 
     if ax is None:
         ax = plt.gca()
 
     vals, vecs = eigsorted(cov)
-    theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
+    theta = np.degrees(np.arctan2(*vecs[:, 0][::-1]))
 
     # Width and height are "full" widths, not radius
     width, height = 2 * nstd * np.sqrt(vals)

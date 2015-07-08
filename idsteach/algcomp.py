@@ -38,45 +38,56 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns  # never called explictly, but changes pyplot settings
 
-# theses are the algorihtms we evaluate. Note that scikit implmentations of vbgmm and dpgmm
-# need some work, so I do not include them in analyses (I use my own implementation of dpgmm).
-# algorithm_list = ['logit', 'svm_linear', 'svm_rbf', 'k_means', 'gmm', 'vbgmm', 'dpgmm']
-# algorithm_list = ['logit', 'svm_linear', 'k_means', 'gmm', 'dpgmm']
+# theses are the algorihtms we evaluate. Note that scikit implmentations of
+# vbgmm and dpgmm need some work, so I do not include them in analyses (I
+# use my own implementation of dpgmm).
+# TODO: Remove code for unused methods.
 algorithm_list = ['logit', 'svm_linear', 'gmm', 'dpgmm']
 
 
-def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None, do_plot=False):
+def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs,
+            filename=None, do_plot=False):
     """
-    Compare the performance of various algorithms on the optimized data and data drawn directly
-    from the target distribution. Measures using ARI (adjusted Rand index), which is the gold
-    standard. Uses the following algorithms:
+    Compare the performance of various algorithms on the optimized data and
+    data drawn directly from the target distribution. Measures using ARI
+    (adjusted Rand index), which is the gold standard. Uses the following
+    algorithms:
 
     1. Multinomial logistic regression (trained on labeled data)
     2. Support-vector machine with linear kernel (trained on labeled data)
-    3. Support-vector machine with radial basis (RBF) kernel (trained on labeled data)
+    3. Support-vector machine with radial basis (RBF) kernel (trained on
+       labeled data)
     4. k-means (given the correct number of components)
-    5. Gaussian mixture model via Expectation-maximization (given correct number of categories)
+    5. Gaussian mixture model via Expectation-maximization (given correct
+       number of categories)
     6. Dirichlet process mixture model (given prior ditribution)
 
-    Inputs:
-        opt_data (list<numpy.ndarray>): A list a data, separated by category (<teacher>.data)
-        target_model (dict): target_model used to generate opt_data
-        data_model (CollapsibleDistribution): data model with prior used by the teacher
-        n_per_cat (list<int>): number of data points to use for training and testing.
-        n_runs (int): number of times over which to average results
+    Parameters
+    ----------
+    opt_data : list<numpy.ndarray>
+        A list a data, separated by category (<teacher>.data)
+    target_model : dict
+        target_model used to generate opt_data
+    data_model : CollapsibleDistribution
+        data model with prior used by the teacher
+    n_per_cat : list<int>
+        number of data points to use for training and testing.
+    n_runs : int
+        number of times over which to average results
+    filename : string
+        If not None (default), saves the results to filename as a pickle of
+        pandas dataframes.
 
-    Kwargs:
-        filename (string): If not None (default), saves the results to filename as a pikcle of
-            pandas dataframes.
-        do_plot (bool): do plotting? I should probably remove this because plotting from withing
-            multiprocessing is going to break everything.
-
-    Returns:
-        None
+    Additional arguments
+    --------------------
+    do_plot : bool
+        do plotting? I should probably remove this because plotting from within
+        multiprocessing is going to break everything.
     """
     data_model.validate_target_model(target_model)
 
-    columns = ['mean_{ADS}', 'mean_{OPT}', 'mean_{CROSS}', 'std_{ADS}', 'std_{OPT}', 'std_{CROSS}']
+    columns = ['mean_{ADS}', 'mean_{OPT}', 'mean_{CROSS}', 'std_{ADS}',
+               'std_{OPT}', 'std_{CROSS}']
     keys = algorithm_list
 
     ari_orig_mean = __prep_result_holder(len(n_per_cat))
@@ -102,11 +113,12 @@ def algcomp(opt_data, target_model, data_model, n_per_cat, n_runs, filename=None
         res_opt_n = __prep_result_holder(n_runs)
         res_cross_n = __prep_result_holder(n_runs)
 
-        # construct args. seed the rng for each processor. I was having trouble with the numpy rng
-        # using the same seed across cores.
+        # construct args. seed the rng for each processor. I was having trouble
+        # with the numpy rng using the same seed across cores.
         args = []
         for _ in range(n_runs):
-            args.append((opt_data, target_model, data_model, n_per, np.random.randint(0, 2**32-1)))
+            args.append((opt_data, target_model, data_model, n_per,
+                         np.random.randint(0, 2**32-1)))
 
         pool = mp.Pool()
         pool.daemon = True
@@ -161,78 +173,106 @@ def __eval_all_mp(args):
 
 def __eval_all(opt_data, target_model, data_model, n_per_cat, do_plot=False):
     """
-    Creates datasets and labels and evaluates clustering performance of all algorithms on both the
-    data derived from the target model as well as optimized data from a Teacher.
+    Creates datasets and labels and evaluates clustering performance of all
+    algorithms on both the data derived from the target model as well as
+    optimized data from a Teacher.
 
-    Inputs:
-        opt_data (list<numpy.ndarray>): A list a data, separated by category (<teacher>.data)
-        target_model (dict): target_model used to generate opt_data
-        data_model (CollapsibleDistribution): data model with prior used by the teacher
-        n_per_cat (int): number of data points to use for training and testing
+    Parameters
+    ----------
+    opt_data : list<numpy.ndarray>
+        A list a data, separated by category (<teacher>.data)
+    target_model : dict
+        target_model used to generate opt_data
+    data_model : CollapsibleDistribution
+        data model with prior used by the teacher
+    n_per_cat : int
+        number of data points to use for training and testing
 
-    Returns:
-        res_orig (dict): each (key, value) pair corresponds to an algorithm (str) and a tuples with
-            the  ARI value (float) that algorithm achieved and its inferred assignment vector
-        res_opt (dict): each (key, value) pair corresponds to an algorithm (str) and a tuples with
-            the  ARI value (float) that algorithm achieved and its inferred assignment vector
+    Returns
+    -------
+    res_orig : dict
+        each (key, value) pair corresponds to an algorithm (str) and a tuples
+        with the  ARI value (float) that algorithm achieved and its inferred
+        assignment vector res_opt (dict): each (key, value) pair corresponds to
+        an algorithm (str) and a tuples with the  ARI value (float) that
+        algorithm achieved and its inferred assignment vector
     """
-    data_train_orig, z_train_orig = __prep_standard_data(target_model, data_model, n_per_cat)
-    data_test_orig, z_test_orig = __prep_standard_data(target_model, data_model, n_per_cat)
+    data_train_orig, z_train_orig = __prep_standard_data(
+        target_model, data_model, n_per_cat)
+    data_test_orig, z_test_orig = __prep_standard_data(
+        target_model, data_model, n_per_cat)
     data_train_opt, z_train_opt = __prep_optimal_data(opt_data, n_per_cat)
     data_test_opt, z_test_opt = __prep_optimal_data(opt_data, n_per_cat)
 
     if do_plot:
         plt.clf()
         plt.subplot(2, 2, 1)
-        plt.scatter(data_train_orig[:, 0], data_train_orig[:, 1], alpha=.5, color='red')
+        plt.scatter(data_train_orig[:, 0], data_train_orig[:, 1], alpha=.5,
+                    color='red')
         plt.title('Original data (train)')
 
         plt.subplot(2, 2, 2)
-        plt.scatter(data_train_opt[:, 0], data_train_opt[:, 1], alpha=.5, color='blue')
+        plt.scatter(data_train_opt[:, 0], data_train_opt[:, 1], alpha=.5,
+                    color='blue')
         plt.title('Optimal data (train)')
 
         plt.subplot(2, 2, 3)
-        plt.scatter(data_test_orig[:, 0], data_test_orig[:, 1], alpha=.5, color='red')
+        plt.scatter(data_test_orig[:, 0], data_test_orig[:, 1], alpha=.5,
+                    color='red')
         plt.title('Original data (test)')
 
         plt.subplot(2, 2, 4)
-        plt.scatter(data_test_opt[:, 0], data_test_opt[:, 1], alpha=.5, color='blue')
+        plt.scatter(data_test_opt[:, 0], data_test_opt[:, 1], alpha=.5,
+                    color='blue')
         plt.title('Optimal data (test)')
         plt.draw()
 
     print("<", end="")
     sys.stdout.flush()
-    res_orig = __eval_set(data_train_orig, z_train_orig, data_test_orig, z_test_orig, data_model)
+    res_orig = __eval_set(data_train_orig, z_train_orig, data_test_orig,
+                          z_test_orig, data_model)
     print("|", end="")
     sys.stdout.flush()
-    res_opt = __eval_set(data_train_opt, z_train_opt, data_test_opt, z_test_opt, data_model)
+    res_opt = __eval_set(data_train_opt, z_train_opt, data_test_opt,
+                         z_test_opt, data_model)
     print(">", end="")
     sys.stdout.flush()
-    res_cross = __eval_set(data_train_opt, z_train_opt, data_test_orig, z_test_orig, data_model)
+    res_cross = __eval_set(data_train_opt, z_train_opt, data_test_orig,
+                           z_test_orig, data_model)
 
     return res_orig, res_opt, res_cross, z_test_opt
 
 
 def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
     """
-    Tests the cluster performance of all algorithms on training and testing data sets.
-        Note that test data is only used for supervised algorithms, which learn from labeled data.
-    All other algorithms are tested on their partitioning of the training data.
+    Tests the cluster performance of all algorithms on training and testing
+    data sets.  Note that test data is only used for supervised algorithms,
+    which learn from labeled data.  All other algorithms are tested on their
+    partitioning of the training data.
 
-    Inputs:
-        train_data (numpy.ndarray): training data
-        train_labels (numpy.ndarray): labels of training data
-        test_data (numpy.ndarray): testing data
-        test_labels (numpy.ndarray): labels of testing data
+    Parameters
+    ----------
+    train_data : numpy.ndarray
+        training data
+    train_labels : numpy.ndarray
+        labels of training data
+    test_data : numpy.ndarray
+        testing data
+    test_labels : numpy.ndarray
+        labels of testing data
 
-    Returns:
-        res (dict): each (key, value) pair corresponds to an algorithm (str) and a tuples with
-            the  ARI value (float) that algorithm achieved and its inferred assignment vector
+    Returns
+    -------
+    res : dict
+        each (key, value) pair corresponds to an algorithm (str) and a tuples
+        with the  ARI value (float) that algorithm achieved and its inferred
+        assignment vector.
     """
 
     # fixed-categoty algorithms
     K = max(train_labels)+1
-    res_gmm = __eval_gmm(train_data, train_labels, K, test_data=test_data, test_labels=test_labels)
+    res_gmm = __eval_gmm(train_data, train_labels, K, test_data=test_data,
+                         test_labels=test_labels)
 
     # variational algorithms
     res_dpgmm = __eval_dpgmm(train_data, train_labels, data_model, alpha=1.0,
@@ -240,7 +280,8 @@ def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
 
     # labeled-set algorithms
     res_logit = __eval_logit(train_data, train_labels, test_data, test_labels)
-    res_svm_linear = __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear')
+    res_svm_linear = __eval_svm(train_data, train_labels, test_data,
+                                test_labels, kernel='linear')
 
     # each entry in res is an (ARI, assgnment vector) tuple
     res = {
@@ -253,27 +294,33 @@ def __eval_set(train_data, train_labels, test_data, test_labels, data_model):
     return res
 
 
-# __________________________________________________________________________________________________
+# _____________________________________________________________________________
 # helpers
-# ``````````````````````````````````````````````````````````````````````````````````````````````````
+# `````````````````````````````````````````````````````````````````````````````
 def __prep_result_holder(n):
     """
-    Returns a dict with a n-length numpy.ndarray of zeros for each clustering algorithm
+    Returns a dict with a n-length numpy.ndarray of zeros for each clustering
+    algorithm
     """
     holder = dict()
     for alg in algorithm_list:
-        holder[alg] = {'ari': np.zeros(n, dtype=np.dtype(float)), 'z': [None]*n}
+        holder[alg] = {
+            'ari': np.zeros(n, dtype=np.dtype(float)),
+            'z': [None]*n}
     return holder
 
 
 def __prep_standard_data(target_model, data_model, n_per_category):
     """
-    Samples n_percategory datapoints from each component in target model accoring to the data model
-    defined by data_model.
+    Samples n_percategory datapoints from each component in target model
+    accoring to the data model defined by data_model.
 
-    Returns:
-        data (numpy.ndarray): the data set
-        Z (numpy.ndarray): the data labels
+    Returns
+    -------
+    data : numpy.ndarray
+        the data set
+    Z : numpy.ndarray
+        the data labels
     """
     data = None
     Z = []
@@ -286,11 +333,15 @@ def __prep_standard_data(target_model, data_model, n_per_category):
 
 def __prep_optimal_data(opt_data, n_per_category):
     """
-    Pulls a n_per_category subset from eaach category and stacks them into one array.
+    Pulls a n_per_category subset from eaach category and stacks them into one
+    array.
 
-    Returns:
-        data (numpy.ndarray): the data set
-        Z (numpy.ndarray): the data labels
+    Returns
+    -------
+    data : numpy.ndarray
+        the data set
+    Z : numpy.ndarray
+        the data labels
     """
     n = opt_data[0].shape[0]
     data = None
@@ -302,9 +353,9 @@ def __prep_optimal_data(opt_data, n_per_category):
     return data, Z
 
 
-# __________________________________________________________________________________________________
+# _____________________________________________________________________________
 # Algorithms w/ known number of clusters
-# ``````````````````````````````````````````````````````````````````````````````````````````````````
+# `````````````````````````````````````````````````````````````````````````````
 def __eval_gmm(data, labels, num_components, test_data=None, test_labels=None):
     """
     Expectation-maximization with a given number of categories
@@ -322,9 +373,9 @@ def __eval_gmm(data, labels, num_components, test_data=None, test_labels=None):
     return ari, Z
 
 
-# __________________________________________________________________________________________________
+# _____________________________________________________________________________
 # Algorithms w/ labeled data
-# ``````````````````````````````````````````````````````````````````````````````````````````````````
+# `````````````````````````````````````````````````````````````````````````````
 def __eval_logit(train_data, train_labels, test_data, test_labels):
     """
     Multinomial logistic regression.
@@ -337,7 +388,8 @@ def __eval_logit(train_data, train_labels, test_data, test_labels):
     return ari, Z
 
 
-def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'):
+def __eval_svm(train_data, train_labels, test_data, test_labels,
+               kernel='linear'):
     """
     Support-vector machine with user-specified kernel (linear, rbf, etc)
     Trained on train_data, tested on test_data. Returns ARI(test_labels, Z)
@@ -349,18 +401,21 @@ def __eval_svm(train_data, train_labels, test_data, test_labels, kernel='linear'
     return ari, Z
 
 
-# __________________________________________________________________________________________________
+# ____________________________________________________________________________
 # Variational algorithms
-# These algorithms must be given a max number of categories, then they choose which categories
-# to keep around. We need to choose high, but if we choose too high, we have to wait froever.
-# I chose n/k because I want to build in a little as possible.
-# ``````````````````````````````````````````````````````````````````````````````````````````````````
-def __eval_dpgmm(data, labels, data_model, alpha=1.0, test_data=None, test_labels=None):
+# These algorithms must be given a max number of categories, then they choose
+# which categories to keep around. We need to choose high, but if we choose
+# too high, we have to wait froever.  I chose n/k because I want to build in a
+# little as possible.
+# ````````````````````````````````````````````````````````````````````````````
+def __eval_dpgmm(data, labels, data_model, alpha=1.0, test_data=None,
+                 test_labels=None):
     """
     Dirichlet proccess EM for Gaussian mixture models.
     Returns ARI(test_labels, Z)
     """
-    dpgmm = PyDPGMM(data_model, data, crp_alpha=alpha, init_mode='single_cluster')
+    dpgmm = PyDPGMM(data_model, data, crp_alpha=alpha,
+                    init_mode='single_cluster')
     Z = dpgmm.fit(n_iter=500, sm_prop=.25, sm_burn=50, num_sm_sweeps=2)
     if test_data is not None and test_labels is not None:
         Z = dpgmm.predict(test_data)
@@ -371,7 +426,7 @@ def __eval_dpgmm(data, labels, data_model, alpha=1.0, test_data=None, test_label
     return ari, Z
 
 
-# _________________________________________________________________________________________________
+# ____________________________________________________________________________
 def ari_subset(data_n, category_list):
     idx = [i for i, zi in enumerate(data_n['z_true']) if zi in category_list]
     z_true = [data_n['z_true'][i] for i in idx]
@@ -422,17 +477,20 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
             clip_opt = get_clip(ari_opt)
 
             sns.distplot(ari_orig, color=c1, ax=axes[j], vertical=True,
-                         kde_kws=dict(clip=clip_orig, label=(None if j > 0 else 'ADS'),
+                         kde_kws=dict(clip=clip_orig,
+                                      label=(None if j > 0 else 'ADS'),
                                       lw=2),
                          hist_kws=dict(histtype="stepfilled"))
             sns.distplot(ari_opt, color=c2, ax=axes[j], vertical=True,
-                         kde_kws=dict(clip=clip_opt, label=None if j > 0 else 'Teaching',
+                         kde_kws=dict(clip=clip_opt,
+                                      label=None if j > 0 else 'Teaching',
                                       lw=2),
                          hist_kws=dict(histtype="stepfilled"))
             if ari_cross is not None:
                 clip_cross = get_clip(ari_cross)
                 sns.distplot(ari_cross, color=c3, ax=axes[j], vertical=True,
-                             kde_kws=dict(clip=clip_cross, label=None if j > 0 else 'Transfer',
+                             kde_kws=dict(clip=clip_cross,
+                                          label=None if j > 0 else 'Transfer',
                                           lw=2),
                              hist_kws=dict(histtype="stepfilled"))
 
@@ -444,8 +502,8 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
                     txt = "\nt: %1.4f\n p: %1.4f" % (tstat, tp)
                 else:
                     raise ValueError("Invalid stat_type: {}".format(stat_type))
-                axes[j].text(1, .95, txt, ha='right', va='top', transform=axes[j].transAxes,
-                             color='#333333')
+                axes[j].text(1, .95, txt, ha='right', va='top',
+                             transform=axes[j].transAxes, color='#333333')
 
             y_l = axes[j].get_ylim()[0]
             y_u = axes[j].get_ylim()[1]
@@ -465,7 +523,8 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
             if ari_cross is not None:
                 aris += [ari_cross]
                 names += ['Transfer']
-            sns.violinplot(aris, positions=1, ax=axes.flat[j], names=names, alpha=.5)
+            sns.violinplot(aris, positions=1, ax=axes.flat[j], names=names,
+                           alpha=.5)
 
             axes[j].set_ylabel('ARI')
         axes[j].set_title(alg.upper())
@@ -484,15 +543,19 @@ def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS'):
 
     ptype = 'kde'
 
-    f, axes = plt.subplots(len(filenames), len(algorithm_list), figsize=(figwidth, figwidth/2.5))
+    f, axes = plt.subplots(len(filenames), len(algorithm_list),
+                           figsize=(figwidth, figwidth/2.5))
 
-    dfs = [pickle.load(open(fname, 'rb'))[n] for n, fname in zip(Ns, filenames)]
+    dfs = [pickle.load(open(fname, 'rb'))[n] for n, fname in
+           zip(Ns, filenames)]
 
-    axes = tuple([plot_single_result(df, ptype, axes[i, :].tolist(), stat_type=stat_type) for i, df
-                 in enumerate(dfs)])
+    axes = tuple([plot_single_result(df, ptype, axes[i, :].tolist(),
+                 stat_type=stat_type) for i, df in enumerate(dfs)])
 
-    y_l = min([min([ax.get_ylim()[0] for ax in axis_row]) for axis_row in axes])
-    y_u = max([max([ax.get_ylim()[1] for ax in axis_row]) for axis_row in axes])
+    y_l = min([min([ax.get_ylim()[0] for ax in axis_row]) for axis_row
+               in axes])
+    y_u = max([max([ax.get_ylim()[1] for ax in axis_row]) for axis_row
+               in axes])
 
     ystp = (y_u - y_l)/3.
     yticks = [y_l, y_l + ystp, y_l + ystp*2, y_u]
@@ -540,11 +603,7 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
     N = [key for key in data.keys()]
     N = sorted(N)
 
-    # n_sbplts_x = 3
-    # n_sbplts_y = 2
-
     for i, n in enumerate(N):
-        # f, axes = plt.subplots(n_sbplts_y, n_sbplts_x, sharex=True, sharey=True, figsize=(4, 8))
         f, axes = plt.subplots(1, len(algorithm_list), figsize=(24, 24/6))
         f.set_facecolor('white')
 
@@ -561,28 +620,29 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
         else:
             plt.show()
 
-# _________________________________________________________________________________________________
-# Entry point
-# `````````````````````````````````````````````````````````````````````````````````````````````````
 if __name__ == '__main__':
     import argparse
     from idsteach.models import NormalInverseWishart
 
     parser = argparse.ArgumentParser(description='Run examples')
-    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+', help='list of number ' +
-                        'of exampler per phoneme')
-    parser.add_argument('--num_runs', type=int, default=100, help='Number of runs to average over.')
-    parser.add_argument('--plot_type', type=str, default='kde', help="type of plot 'kde' (default)"
-                        "or 'violin'")
-    parser.add_argument('--filename', type=str, default='alcomptest.pkl', help='save as filename')
-    parser.add_argument('--multirun', action='store_true', default=False, help='use data from '
-                        'multiple sampler chains')
-    parser.add_argument('--base_figname', type=str, default='alcomptest', help='save figure as '
-                        'filename')
-    parser.add_argument('--matlab_data', action='store_true', help='input data is a matlab .csv '
-                        'rather than pandas df')
-    parser.add_argument('--flatten', action='store_true', help='Remove f3 dimension (only '
-                        'applicable for non-matlab data')
+    parser.add_argument('--num_examples', metavar='N', type=int, nargs='+',
+                        help='list of number of exampler per phoneme')
+    parser.add_argument('--num_runs', type=int, default=100,
+                        help='Number of runs to average over.')
+    parser.add_argument('--plot_type', type=str, default='kde',
+                        help="type of plot 'kde' (default) or 'violin'")
+    parser.add_argument('--filename', type=str, default='alcomptest.pkl',
+                        help='save as filename')
+    parser.add_argument('--multirun', action='store_true', default=False,
+                        help='use data from multiple sampler chains')
+    parser.add_argument('--base_figname', type=str, default='alcomptest',
+                        help='save figure as filename')
+    parser.add_argument('--matlab_data', action='store_true',
+                        help='input data is a matlab .csv rather than '
+                        'pandas df')
+    parser.add_argument('--flatten', action='store_true',
+                        help='Remove f3 dimension (only applicable for '
+                        'non-matlab data')
 
     args = parser.parse_args()
 
@@ -593,21 +653,24 @@ if __name__ == '__main__':
     data_model = NormalInverseWishart.with_vague_prior(target_model)
 
     if args.flatten:
-        target_model, data_model = utils.flatten_niw_model(target_model, data_model)
+        target_model, data_model = utils.flatten_niw_model(target_model,
+                                                           data_model)
 
     if args.multirun:
         if args.matlab_data:
             dirname = os.path.join('../data', 'ml_runs')
             data = utils.multiple_matlab_csv_to_teacher_data(dirname)
         else:
-            raise NotImplementedError('Must use multiple data sets when using pandas')
+            raise NotImplementedError('Must use multiple data sets when '
+                                      'using pandas')
     else:
         if args.matlab_data:
             dirname = os.path.join('../data', 'lrunml')
             data = utils.matlab_csv_to_teacher_data(dirname)
         else:
             dirname = os.path.join('../data', 'ptn_runs')
-            data = utils.multiple_pandas_to_teacher_data(dirname, remove_f3=args.flatten)
+            data = utils.multiple_pandas_to_teacher_data(
+                dirname, remove_f3=args.flatten)
 
     algcomp(data, target_model, data_model, args.num_examples, args.num_runs,
             filename=args.filename)
