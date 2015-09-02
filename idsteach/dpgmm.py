@@ -58,7 +58,7 @@ class DPGMM(object):
     def __init__(self, data_model, data, crp_alpha=1.0, init_mode='from_prior'):
         self.data_model = data_model
         self.data = data
-        self.crp_alpha = crp_alpha 
+        self.crp_alpha = crp_alpha
 
         self._n = data.shape[0]
         self._rows = [i for i in range(self._n)]
@@ -70,7 +70,10 @@ class DPGMM(object):
             self.Nk = [self._n]
             self.K = 1
 
-    def score_data(self, Z):
+    def score_data(self, Z=None):
+        if Z is None:
+            Z = self.Z
+
         log_score = 0
         for k in range(max(Z)+1):
             X_k = self.data[np.nonzero(Z == k)[0], :]
@@ -78,7 +81,6 @@ class DPGMM(object):
         return log_score
 
     def __restricted_init(self, Z, Nk, k1, k2, sweep_indices):
-        
         idx_1 = [k1]
         idx_2 = [k2]
 

@@ -30,13 +30,15 @@ static double calc_log_z(const arma::mat &lambda, double kappa, double nu)
     double d = double(lambda.n_rows);
     double log_z = 0;
 
-    log_z = log(2)*(nu*d/2) + (d/2.0)*log(2*M_PI/kappa) + mvgammaln(nu/2, d) - (nu/2)*logdet(lambda);
+    log_z = log(2)*(nu*d/2) + (d/2.0)*log(2*M_PI/kappa) + mvgammaln(nu/2, d);
+    log_z -= (nu/2)*logdet(lambda);
     return log_z;
 }
 
 
-static void niw_update_params(const arma::mat &X, arma::rowvec &mu_0, arma::mat &lambda_0,
-        double &kappa_0, double &nu_0)
+static void niw_update_params(const arma::mat &X, arma::rowvec &mu_0,
+                              arma::mat &lambda_0, double &kappa_0,
+                              double &nu_0)
 {
 
     arma::mat xbar, S;
@@ -62,8 +64,9 @@ static void niw_update_params(const arma::mat &X, arma::rowvec &mu_0, arma::mat 
 }
 
 
-static double lgniwpp(const arma::mat &Y, const arma::mat &X, const arma::rowvec &mu_0,
-        const arma::mat &lambda_0, double kappa_0, double nu_0)
+static double lgniwpp(const arma::mat &Y, const arma::mat &X,
+                      const arma::rowvec &mu_0, const arma::mat &lambda_0,
+                      double kappa_0, double nu_0)
 {
     auto d = static_cast<double>(X.n_cols); // dimensions
 
@@ -89,9 +92,11 @@ static double lgniwpp(const arma::mat &Y, const arma::mat &X, const arma::rowvec
 }
 
 
-static double lgniwpp(std::vector<std::vector<double>> Y, std::vector<std::vector<double>> X,
-        std::vector<double> mu_0, std::vector<std::vector<double>> lambda_0, double kappa_0,
-        double nu_0)
+static double lgniwpp(std::vector<std::vector<double>> Y,
+                      std::vector<std::vector<double>> X,
+                      std::vector<double> mu_0,
+                      std::vector<std::vector<double>> lambda_0,
+                      double kappa_0, double nu_0)
 {
     auto Y_arma = array_to_mat(Y);
     auto X_arma = array_to_mat(X);
@@ -102,8 +107,9 @@ static double lgniwpp(std::vector<std::vector<double>> Y, std::vector<std::vecto
 }
 
 
-static double lgniwml(const arma::mat &X_k, const arma::rowvec &mu_0, const arma::mat &lambda_0, 
-        double kappa_0, double nu_0, double Z_0)
+static double lgniwml(const arma::mat &X_k, const arma::rowvec &mu_0,
+                      const arma::mat &lambda_0, double kappa_0, double nu_0,
+                      double Z_0)
 {
     auto n = static_cast<double>(X_k.n_rows); // number of data points
     auto d = X_k.n_cols; // dimensions
@@ -121,8 +127,10 @@ static double lgniwml(const arma::mat &X_k, const arma::rowvec &mu_0, const arma
 } 
 
 
-static double lgniwml(std::vector<std::vector<double>> &X_k, std::vector<double> &mu_0, 
-        std::vector<std::vector<double>> &lambda_0, double kappa_0, double nu_0, double Z_0)
+static double lgniwml(std::vector<std::vector<double>> &X_k,
+                      std::vector<double> &mu_0,
+                      std::vector<std::vector<double>> &lambda_0,
+                      double kappa_0, double nu_0, double Z_0)
 {
     auto X_k_arma = array_to_mat(X_k);
     auto lambda_0_arama = array_to_mat(lambda_0);
@@ -133,9 +141,13 @@ static double lgniwml(std::vector<std::vector<double>> &X_k, std::vector<double>
 
 
 static double lgniwmmml(std::vector<std::vector<double>> X_,
-        std::vector<std::vector<double>> lambda_0_, std::vector<double> mu_0_, double kappa_0,
-        double nu_0, double crp_alpha, std::vector<size_t> Z_start, std::vector<size_t> k_start,
-        std::vector<double> hist_start, size_t do_n_calculations)
+                        std::vector<std::vector<double>> lambda_0_,
+                        std::vector<double> mu_0_, double kappa_0,
+                        double nu_0, double crp_alpha,
+                        std::vector<size_t> Z_start,
+                        std::vector<size_t> k_start,
+                        std::vector<double> hist_start,
+                        size_t do_n_calculations)
 {
     // convert lambda_0 and mu_0 to arama::mat
     auto X = array_to_mat(X_);
@@ -172,8 +184,8 @@ static double lgniwmmml(std::vector<std::vector<double>> X_,
 
 
 static double score_data(const std::vector<size_t> &Z, const arma::mat &X,
-        const arma::rowvec &mu_0, const arma::mat &lambda_0, double kappa_0, double nu_0,
-        double log_z)
+                         const arma::rowvec &mu_0, const arma::mat &lambda_0,
+                         double kappa_0, double nu_0, double log_z)
 {
     size_t K = *max_element(Z.begin(), Z.end());
     double score = 0;

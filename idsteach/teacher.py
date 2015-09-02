@@ -33,6 +33,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
+NIW_ML_ENUMERATE = 0
+NIW_ML_BHC = 1
+NIW_ML_PGIBBS = 2
+
+APPROX_KEY = {'bhc': NIW_ML_BHC, 'pgibbs': NIW_ML_PGIBBS}
+
+
 class Teacher(object):
     """
     Teacher produces data optimized to teach a target categorization model to a
@@ -55,12 +62,12 @@ class Teacher(object):
         Concentration parameter for CRP
     """
     def __init__(self, target, data_model, crp_alpha, t_std=50, use_mp=False,
-                 fast_niw=True, bhc_approx=False, yes=False):
+                 fast_niw=True, approx=False, yes=False):
         """
         FIXME: Fill in
         """
         n = len(target['assignment'])
-        if n > 12 and not yes:
+        if n > 12 and not (yes or approx):
             raise ValueError("**WARNING: n is very large. Exiting. Bypass "
                              "with yes=True")
 
@@ -74,7 +81,13 @@ class Teacher(object):
         self._use_mp = use_mp
         self._num_procs = mp.cpu_count()
         self._fast_niw = fast_niw
-        self._bhc_approx = bhc_approx
+        if approx is not False:
+            self._approx = APPROX_KEY[approx.lower()]
+
+        if self._use_mp and self._approx:
+            print('No multiprocessing needd for approximation. '
+                  'setting use_mp=False.')
+            self._use_mp = False
 
         if n < 6 and self._use_mp:
             print("**WARNING: The target conditions favor serial execution. "
@@ -149,8 +162,11 @@ class Teacher(object):
             H[z] += 1
         self.p_crp_true = models.do_log_crp(H, self._n, self.crp_alpha)
 
-        # generate som random start data
-        self.X = data_model.draw_data_from_prior(self._n)
+        # generate some random start data from the original model
+        self.X = np.zeros((self._n, self._d))
+        for i, k in enumerate(self.target['assignment']):
+            mu_k, sigma_k = self.target['parameters'][k]
+            self.X[i, :] = np.random.multivariate_normal(mu_k, sigma_k)
         self.logp = self.evaluate_probability(self.X)
 
     def evaluate_probability(self, X):
@@ -184,8 +200,11 @@ class Teacher(object):
             to_sum = mapper(fniw.niw_mmml_mp, args)
 
             denom = logsumexp(to_sum)
-        elif self._bhc_approx:
+        elif self._approx == NIW_ML_BHC:
             _, denom = bhc(X, self.data_model, self.crp_alpha)
+        elif self._approx == NIW_ML_PGIBBS:
+            denom = fniw.pgibbs_estimator(X, self.data_model, self.crp_alpha,
+                                          n_samples=1000)
         else:
             for i in range(self._num_procs):
                 args.append((self.data_model, X, copy.copy(self.zs[i]),
@@ -200,9 +219,25 @@ class Teacher(object):
 
         return numer-denom
 
-    def mh(self, n, burn=200, lag=50, plot_diagnostics=False):
+    def mh(self, n, burn=200, lag=50, plot_diagnostics=False,
+           datum_jitter=False):
         """
-        Use Metropolis-Hastings sampling to generate data samples
+        Use Metropolis-Hastings (MH) sampling to generate data samples
+
+        Parameters
+        ----------
+        n : int
+            Number of samples to collect.
+        burn : int
+            Number of initial samples to disregard.
+        lag : int
+            Number of transitions to perform between sample collections.
+        plot_diagnostics : bool , optional
+            Do real-time plot of data and scores over time.
+        datum_jitter : bool, optional
+            If False (default), at each iteration, the proposal distribution
+            perturbs the entire dataset; otherwise perturbs a single randomly-
+            selected datum.
         """
         total_iters = 0
         widgets = [ETA(), ' ', RotatingMarker()]
@@ -210,7 +245,8 @@ class Teacher(object):
         pbar.start()
         for _ in range(burn):
             # sample new data
-            X_prime = utils.jitter_data(np.copy(self.X), self.t_std)
+            X_prime = utils.jitter_data(np.copy(self.X), self.t_std,
+                                        datum_jitter)
             logp_prime = self.evaluate_probability(X_prime)
 
             if np.log(np.random.rand()) < logp_prime - self.logp:
@@ -228,7 +264,8 @@ class Teacher(object):
         for itr in range(n):
             # sample new data
             for _ in range(lag):
-                X_prime = utils.jitter_data(np.copy(self.X), self.t_std)
+                X_prime = utils.jitter_data(np.copy(self.X), self.t_std,
+                                            datum_jitter)
                 logp_prime = self.evaluate_probability(X_prime)
 
                 if np.log(np.random.rand()) < logp_prime - self.logp:

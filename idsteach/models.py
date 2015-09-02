@@ -175,6 +175,46 @@ class NormalInverseWishart(CollapsibleDistribution):
         }
         return cls(**prior_hyperparameters)
 
+    @property
+    def nu0(self):
+        return self.nu_0
+
+    @nu0.setter
+    def nu0(self, value):
+        self.nu_0 = value
+        self.log_z = self.calc_log_z(self.mu_0, self.lambda_0, self.kappa_0,
+                                     self.nu_0)
+
+    @property
+    def mu0(self):
+        return self.mu_0
+
+    @mu0.setter
+    def mu0(self, value):
+        self.mu_0 = value
+        self.log_z = self.calc_log_z(self.mu_0, self.lambda_0, self.kappa_0,
+                                     self.nu_0)
+
+    @property
+    def kappa0(self):
+        return self.kappa_0
+
+    @kappa0.setter
+    def kappa0(self, value):
+        self.kappa_0 = value
+        self.log_z = self.calc_log_z(self.mu_0, self.lambda_0, self.kappa_0,
+                                     self.nu_0)
+
+    @property
+    def lambda0(self):
+        return self.lambda_0
+
+    @lambda0.setter
+    def lambda0(self, value):
+        self.lambda_0 = value
+        self.log_z = self.calc_log_z(self.mu_0, self.lambda_0, self.kappa_0,
+                                     self.nu_0)
+
     @staticmethod
     def log_likelihood(X, *likelihood_params):
         return np.sum(mvnorm.logpdf(X, *likelihood_params))

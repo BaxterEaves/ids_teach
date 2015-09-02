@@ -27,6 +27,8 @@ import seaborn as sns  # never called explictly, but changes pyplot settings
 from scipy.misc import logsumexp
 from scipy.special import multigammaln
 from scipy.special import gammaln
+from scipy.spatial.distance import pdist
+from scipy.spatial.distance import cdist
 from numpy.linalg import slogdet
 from numpy.linalg import solve
 from random import shuffle
@@ -37,8 +39,92 @@ ITERATIONS = 1000
 
 
 def cohen_d(a, b):
-    return (np.mean(a) - np.mean(b)) / (np.sqrt((np.std(a, ddof=1.) ** 2. +
-        np.std(b, ddof=1.) ** 2.) / 2.))
+    top = (np.mean(a) - np.mean(b))
+    btm = (np.sqrt((np.std(a, ddof=1.)**2. + np.std(b, ddof=1.) ** 2.) / 2.))
+    return top / btm
+
+
+def kernel_two_sample_test(X, Y, permutations=10000):
+    """
+    This function tests the null hypothesis that X and Y are samples drawn
+    from the same population of arbitrary dimension D. The permutation method
+    (non-parametric) is used, the test statistic is
+    E[k(X,X')] + E[k(Y,Y')] - 2E[k(X,Y)].
+
+    A Gaussian kernel is used with width equal to the median distance between
+    vectors in the aggregate sample.
+
+    References
+    ----------
+    http://www.stat.berkeley.edu/~sbalakri/Papers/MMD12.pdf
+    https://normaldeviate.wordpress.com/2012/07/14/modern-two-sample-tests/
+
+    Parameters
+    ----------
+    X : numpy.ndarray
+        samples from the first population.  Each row is a D-dimensional data
+        point.
+    Y : numpy.array
+        samples from the second population.  Each row is a D-dimensional data
+        point.
+    permutations : int, optional
+        number of times to resample, default 10000.
+
+    Returns
+    -------
+    p : float
+        p-value of the statistical test
+    """
+
+    if X.shape[1] != Y.shape[1]:
+        raise ValueError('X and y should have the same dimensionality.')
+
+    n = X.shape[0]
+
+    # Gaussian kernel
+    def _gauss_kernel(d, h):
+        return np.sum(np.exp(-d**2/h**2))
+
+    def _compute_kernel_statistic(X, Y, h):
+        n = X.shape[0]
+        m = Y.shape[0]
+
+        if h == 0.0:
+            h = 1.0
+
+        Exy = 2./(n*m)*_gauss_kernel(cdist(X, Y, 'euclidean'), h)
+
+        # double these quanitites because pdist produces C(len(X), 2) entries
+        # which accounts for half of the total sum for each term in the
+        # statistic. We also need to control for the diagnoal; the Guassian
+        # kernel will produce ones along the diagnoal.
+        Exx = 2./(n*n)*(_gauss_kernel(pdist(X, 'euclidean'), h) + .5*n)
+        Eyy = 2./(m*m)*(_gauss_kernel(pdist(Y, 'euclidean'), h) + .5*m)
+
+        return Exx + Eyy - Exy
+
+    # Pool the samples.
+    S = np.vstack((X, Y))
+
+    # Computer kernel width
+    h = np.mean(pdist(S, 'euclidean'))
+
+    # Compute the observed statistic.
+    t_star = _compute_kernel_statistic(X, Y, h)
+    Tj = np.zeros(permutations)
+    T = t_star
+
+    # Compute resampled test statistics.
+    for j in range(permutations):
+        np.random.shuffle(S)
+        Xp, Yp = S[:n], S[n:]
+        tj = _compute_kernel_statistic(Xp, Yp, h)
+        Tj[j] = tj
+
+    # Fraction of samples larger than observed t_star (with error correction).
+    f = np.sum(Tj >= T)+1
+    p = f/(permutations+1)
+    return p
 
 
 def dist(a, b):
@@ -100,17 +186,30 @@ def hz_to_erb(f):
     """
     Converts a numpy array, f, full of data measured in Hz to ERB according to:
 
-    B.C.J. Moore and B.R. Glasberg, "Suggested formulae for calculating 
-        auditory-filter bandwidths and excitation patterns" Journal of the 
+    B.C.J. Moore and B.R. Glasberg, "Suggested formulae for calculating
+        auditory-filter bandwidths and excitation patterns" Journal of the
         Acoustical Society of America 74: 750-753, 1983.
     http://en.wikipedia.org/wiki/Equivalent_rectangular_bandwidth
     """
     return 6.23*(f**2) + 93.9*f + 28.52
 
 
-def jitter_data(X, std):
+def jitter_data(X, std, datum_jitter=False):
     """
     Add random Gaussian noise (with standard deviation std) to X.
+
+    Parameters
+    ----------
+    X : numpy.ndarray (n, d)
+        The input data
+    std : float
+        Standard deviation of the jitter
+    datum_jitter : bool
+        If True, jitter only a single data point
+
+    Notes
+    -----
+    Will mutate X.
 
     Examples
     --------
@@ -132,7 +231,13 @@ def jitter_data(X, std):
     if not isinstance(X, np.ndarray):
         raise TypeError("X must be a numpy array")
 
-    return X + np.random.randn(*X.shape)*std
+    if datum_jitter:
+        row = np.random.randint(0, X.shape[0])
+        d = X.shape[1]
+        X[row, :] = np.random.multivariate_normal(X[row, :], np.eye(d)*std)
+        return X
+    else:
+        return X + np.random.randn(*X.shape)*std
 
 
 def what_do_you_think_about_the_stars_in_the_sky():

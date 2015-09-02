@@ -30,10 +30,17 @@ class DPGMM
 {
 public:
     DPGMM(arma::mat X, arma::rowvec mu_0, arma::mat lambda_0, double kappa_0,
-            double nu_0,  double crp_alpha, bool single_cluster_init) : 
-    _X(X), _mu_0(mu_0), _lambda_0(lambda_0), _kappa_0(kappa_0), _nu_0(nu_0), _crp_alpha(crp_alpha),
-    _n(X.n_rows)
+          double nu_0,  double crp_alpha, bool single_cluster_init, int seed) : 
+    _X(X), _mu_0(mu_0), _lambda_0(lambda_0), _kappa_0(kappa_0), _nu_0(nu_0),
+    _crp_alpha(crp_alpha), _n(X.n_rows)
     {
+        if ( seed >= 0 ){
+            _rng = std::mt19937(seed); 
+        } else {
+            std::random_device rd;
+            _rng = std::mt19937(rd());
+        }
+
         if(single_cluster_init){
             _Z.resize(_n, 0);
             _Nk.resize(1, _n);
@@ -45,15 +52,25 @@ public:
 
         _row_list.resize(_n);
         for(size_t i = 0; i < _n; ++i) _row_list[i] = i;
+
+        _logp_itr.push_back(logp());
+        _K_itr.push_back(_K);
     }
 
-    // to be called from the python wrapper
     DPGMM(std::vector<std::vector<double>> X, std::vector<double> mu_0, 
-            std::vector<std::vector<double>> lambda_0, double kappa_0, double nu_0,
-            double crp_alpha, bool single_cluster_init) :
-     _kappa_0(kappa_0), _nu_0(nu_0), _crp_alpha(crp_alpha), _n(X.size()), _X(array_to_mat(X)),
-     _lambda_0(array_to_mat(lambda_0)), _mu_0(arma::conv_to<arma::rowvec>::from(mu_0))
+          std::vector<std::vector<double>> lambda_0, double kappa_0,
+          double nu_0, double crp_alpha, bool single_cluster_init, int seed) :
+     _kappa_0(kappa_0), _nu_0(nu_0), _crp_alpha(crp_alpha), _n(X.size()),
+     _X(array_to_mat(X)), _lambda_0(array_to_mat(lambda_0)),
+     _mu_0(arma::conv_to<arma::rowvec>::from(mu_0))
      {
+        if ( seed >= 0 ){
+            _rng = std::mt19937(seed); 
+        } else {
+            std::random_device rd;
+            _rng = std::mt19937(rd());
+        }
+
         if(single_cluster_init){
             _Z.resize(_n, 0);
             _Nk.resize(1, _n);
@@ -65,47 +82,74 @@ public:
 
         _row_list.resize(_n);
         for(size_t i = 0; i < _n; ++i) _row_list[i] = i;
-    }
-    
-    // Does n Gibbs speeps
-    void fit(size_t n_iter, double sm_prop, size_t num_sm_sweeps, size_t sm_burn);
 
-    // predicts to which cateogry each datum in Y would be assigned
+        _logp_itr.push_back(logp());
+        _K_itr.push_back(_K);
+    }
+    double seqinit(size_t n_sweeps); 
+
+    double fit(size_t n_iter, double sm_prop, size_t num_sm_sweeps,
+             size_t sm_burn);
+
     std::vector<size_t> predict(std::vector<std::vector<double>> Y);
     std::vector<size_t> predict(arma::mat Y);
 
-    // Returns the assignment vector
     std::vector<size_t> get_Z(){return _Z;};
+    std::vector<double> get_Nk(){return _Nk;};
+    size_t get_K(){return _K;};
+
+    std::vector<double> get_logps(){return _logp_itr;};
+    std::vector<size_t> get_ks(){return _K_itr;};
+
+    double logp();
 
 private:
     // Does iterative Gibbs on each row in random order
-    void __update_gibbs();
-    void __update_sm(size_t num_sm_sweeps);
-    void __restricted__init(std::vector<size_t> &Z, std::vector<double> &Nk, size_t k1, size_t k2,
-        std::vector<size_t> sweep_indices);
-    double __restricted_gibbs_sweep(std::vector<size_t> &Z, std::vector<double> &Nk, size_t k1,
-        size_t k2, std::vector<size_t> sweep_indices, const std::vector<size_t> &Z_final={});
+    void __update_gibbs(double &logp_trns);
+    void __update_sm(size_t num_sm_sweeps, double &logp_trns);
+    void __restricted__init(std::vector<size_t> &Z, std::vector<double> &Nk,
+                            size_t k1, size_t k2,
+                            std::vector<size_t> sweep_indices);
+    double __restricted_gibbs_sweep(std::vector<size_t> &Z,
+                                    std::vector<double> &Nk, size_t k1,
+                                    size_t k2,
+                                    std::vector<size_t> sweep_indices,
+                                    const std::vector<size_t> &Z_final={});
 
-    // random number generator
     std::mt19937 _rng;              
 
     // the data
     const arma::mat _X;
-    const size_t _n;                // number of data points
-    std::vector<size_t> _row_list;  // row indices for changing update order
+    // number of data points
+    const size_t _n;
+    // row indices for changing update order
+    std::vector<size_t> _row_list;  
 
-    // NIW prior (see Murphy [2007])
-    const arma::rowvec _mu_0;       // prior mean
-    const arma::mat _lambda_0;      // prior scal matrix
-    const double _kappa_0;          // number of prior observations
-    const double _nu_0;             // degrees of freedom
-    const double _crp_alpha;        // CRP discount parameter
-    double _log_z;                  // default normalizing constant
+    // prior mean 
+    const arma::rowvec _mu_0;
+    // prior scal matrix
+    const arma::mat _lambda_0;
+    // number of prior observations        
+    const double _kappa_0;
+    // degrees of freedom
+    const double _nu_0;
+    // CRP discount parameter
+    const double _crp_alpha;
+    // default normalizing constant
+    double _log_z;
 
-    // partition information
-    std::vector<size_t> _Z;         // _Z[i] is the component to which datum i belongs
-    std::vector<double> _Nk;        // _Nk[k] is the number of data assigned to component k
-    size_t _K;                      // number of components
+    // _Z[i] is the component to which datum i belongs
+    std::vector<size_t> _Z;
+    // _Nk[k] is the number of data assigned to component k
+    std::vector<double> _Nk;
+    // number of components
+    size_t _K;
+
+    // probability of the data given the partitioning, P(X|Z) for each
+    // iterations
+    std::vector<double> _logp_itr;
+    // Number of components for each iteration
+    std::vector<size_t> _K_itr;
 
 };
 

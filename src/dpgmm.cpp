@@ -20,17 +20,22 @@
 using std::vector;
 
 
-void DPGMM::fit(size_t n, double sm_prop, size_t num_sm_sweeps, size_t sm_burn)
+double DPGMM::fit(size_t n, double sm_prop, size_t num_sm_sweeps, size_t sm_burn)
 {
+    double logp_trns = 0;
     std::uniform_real_distribution<double> rand(0, 1);
-
+    
     for(size_t i = 0; i < n; ++i){
         if(i < sm_burn or rand(_rng) < sm_prop){
-            __update_sm(num_sm_sweeps);
+            __update_sm(num_sm_sweeps, logp_trns);
         } else {
-            __update_gibbs();
+            __update_gibbs(logp_trns);
         }
+        _logp_itr.push_back(logp());
+        _K_itr.push_back(_K);
     }
+
+    return logp_trns;
 }
 
 
@@ -63,16 +68,96 @@ vector<size_t> DPGMM::predict(arma::mat Y)
 }
 
 
+double DPGMM::seqinit(size_t n_sweeps){
+    std::shuffle(_row_list.begin(), _row_list.end(), _rng);
+    size_t fr = _row_list[0];
+
+    for(auto &z : _Z) z = -1;
+    _Z[fr]= 0;
+    _Nk.resize(1);
+    _Nk[0] = 1;
+    _K = 1;
+
+    vector<size_t> initrows = {fr};
+
+    double logp = 0;
+
+    for(size_t ridx = 1; ridx < _n; ++ridx){
+        size_t row = _row_list[ridx];
+        arma::mat Y = _X.row(row);
+        ASSERT_EQUAL(std::cout, initrows.size(), ridx);
+        ASSERT_EQUAL(std::cout, Y.n_rows, 1);
+        ASSERT_EQUAL(std::cout, Y.n_cols, _X.n_cols);
+
+        std::vector<double> ps(_Nk.begin(), _Nk.end());
+        ps.push_back(_crp_alpha);
+
+        for(auto &p : ps) p = log(p);
+
+        // singleton probability
+        ps.back() += lgniwml(Y, _mu_0, _lambda_0, _kappa_0, _nu_0, _log_z);
+
+        for(size_t k = 0; k < _K; ++k){
+            std::vector<size_t> idx;
+            for(auto &i : initrows)
+                if (_Z[i] == k) idx.push_back(i);
+
+            auto Xk = fetch_rows(_X, idx);
+            ASSERT_EQUAL(std::cout, Xk.n_rows, _Nk[k]);
+            ps[k] += lgniwpp(Y, Xk, _mu_0, _lambda_0, _kappa_0, _nu_0);
+        }
+
+        double norm = logsumexp(ps);
+        for(auto &lp : ps) lp -= norm;
+
+        size_t k_b = lpflip(ps, _rng);
+        ASSERT(std::cout, k_b <= _K);
+        logp += ps[k_b];
+
+        // clean up
+        _Z[row] = k_b; 
+        initrows.push_back(row);
+        if(k_b < _K){
+            ++_Nk[k_b];
+        }else{
+            _Nk.push_back(1);
+            ++_K;
+        }
+    }
+
+    // FIXME: This part is wrong. n_sweeps > 1 results in the wrong answer
+    for (size_t i = 0; i < n_sweeps; i++){
+        this->__update_gibbs(logp);
+    }
+    // if (n_sweeps > 0) logp -= n_sweeps*lgamma(_n);
+
+    return logp;
+}
+
 vector<size_t> DPGMM::predict(vector<vector<double>> Y)
 {
     return predict(array_to_mat(Y));
 }
 
 
-// ________________________________________________________________________________________________
+double DPGMM::logp()
+{
+    double logpr = lcrp(_Nk, _n, _crp_alpha);
+    // double logpr = 0;
+    for(size_t k = 0; k < _K; ++k){
+        std::vector<size_t> idx = {};
+        for(size_t i = 0; i < _Z.size(); ++i) if(_Z[i] == k) idx.push_back(i);
+        auto Xk = fetch_rows(_X, idx);
+        ASSERT_EQUAL(std::cout, Xk.n_rows, _Nk[k]);
+        logpr += lgniwml(Xk, _mu_0, _lambda_0, _kappa_0, _nu_0, _log_z);
+    }
+    return logpr;
+}
+
+// ____________________________________________________________________________
 // Split-merge items
-// ````````````````````````````````````````````````````````````````````````````````````````````````
-void DPGMM::__update_sm(size_t num_sm_sweeps){
+// ````````````````````````````````````````````````````````````````````````````
+void DPGMM::__update_sm(size_t num_sm_sweeps, double &logp_trns){
     ASSERT_GREATER_THAN_ZERO(std::cout, num_sm_sweeps);
 
     std::uniform_int_distribution<size_t> row_rand(0, _n-1);
@@ -87,8 +172,9 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
         row_2 = row_rand(_rng);
         ASSERT(std::cout, row_2 >= 0 and row_2 < _n);
         ++try_iters;
-        if(try_iters > _n){
-            std::cout << "Could not draw two unique rows among " << _n << "..." << std::endl;
+        if(try_iters > _n*10){
+            std::cout << "Could not draw two unique rows among " << _n;
+            std::cout << "..." << std::endl;
             std::cout << "First row was " << row_1 << "." << std::endl;
             throw 1;
         }
@@ -115,20 +201,23 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
 
     auto k2_launch = k2;
     
-    __restricted__init(Z_launch, Nk_launch, k1_launch, k2_launch, sweep_indices);
+    __restricted__init(Z_launch, Nk_launch, k1_launch, k2_launch,
+                       sweep_indices);
 
     double Q_launch = 0;
     for(size_t sweep = 0; sweep < num_sm_sweeps; ++sweep){
-        Q_launch = __restricted_gibbs_sweep(Z_launch, Nk_launch, k1_launch, k2_launch,
-                                            sweep_indices);
+        Q_launch = __restricted_gibbs_sweep(Z_launch, Nk_launch, k1_launch,
+                                             k2_launch, sweep_indices);
     }
 
     ASSERT(std::cout, Q_launch != 0);
 
     if(k1 == k2){
         // split propsal
-        double score_split = score_data(Z_launch, _X, _mu_0, _lambda_0, _kappa_0, _nu_0, _log_z);
-        double score_current = score_data(_Z, _X, _mu_0, _lambda_0, _kappa_0, _nu_0, _log_z);
+        double score_split = score_data(Z_launch, _X, _mu_0, _lambda_0,
+                                        _kappa_0, _nu_0, _log_z);
+        double score_current = score_data(_Z, _X, _mu_0, _lambda_0, _kappa_0,
+                                          _nu_0, _log_z);
         double L = score_split - score_current;
         double P = lcrp(Nk_launch, _n, _crp_alpha) - lcrp(_Nk, _n, _crp_alpha);
 
@@ -142,8 +231,6 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
         // merge proposal
         auto Z_merge = _Z;
         auto Nk_merge =_Nk;
-        auto k1_merge = k2;
-        auto k2_merge = k2;
 
         Z_merge[row_1] = k2;
         for(auto &idx : sweep_indices)
@@ -154,13 +241,16 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
         for(auto &z : Z_merge)
             if(z > k1) --z;
 
-        double Q = __restricted_gibbs_sweep(Z_launch, Nk_launch, k1_launch, k2_launch,
-                                            sweep_indices, _Z);
+        double Q = __restricted_gibbs_sweep(Z_launch, Nk_launch, k1_launch,
+                                            k2_launch, sweep_indices, _Z);
+        logp_trns += Q;
 
         ASSERT(std::cout, Q != 0);
         
-        double score_merge = score_data(Z_merge, _X, _mu_0, _lambda_0, _kappa_0, _nu_0, _log_z);
-        double score_current = score_data(_Z, _X, _mu_0, _lambda_0, _kappa_0, _nu_0, _log_z);
+        double score_merge = score_data(Z_merge, _X, _mu_0, _lambda_0,
+                                        _kappa_0, _nu_0, _log_z);
+        double score_current = score_data(_Z, _X, _mu_0, _lambda_0, _kappa_0,
+                                          _nu_0, _log_z);
         double L = score_merge - score_current;
         double P = lcrp(Nk_merge, _n, _crp_alpha) - lcrp(_Nk, _n, _crp_alpha);
 
@@ -174,8 +264,9 @@ void DPGMM::__update_sm(size_t num_sm_sweeps){
 }
 
 
-void DPGMM::__restricted__init(vector<size_t> &Z, vector<double> &Nk, size_t k1, size_t k2,
-    vector<size_t> sweep_indices)
+void DPGMM::__restricted__init(vector<size_t> &Z, vector<double> &Nk,
+                               size_t k1, size_t k2,
+                               vector<size_t> sweep_indices)
 {
     std::uniform_real_distribution<double> rand(0.0, 1.0);
 
@@ -190,8 +281,10 @@ void DPGMM::__restricted__init(vector<size_t> &Z, vector<double> &Nk, size_t k1,
         auto X_1 = fetch_rows(_X, idx_1);
         auto X_2 = fetch_rows(_X, idx_2);
 
-        double lp_k1 = log(Nk[k1]) + lgniwpp(Y, X_1, _mu_0, _lambda_0, _kappa_0, _nu_0);
-        double lp_k2 = log(Nk[k2]) + lgniwpp(Y, X_2, _mu_0, _lambda_0, _kappa_0, _nu_0);
+        double lp_k1 = log(Nk[k1]) + lgniwpp(Y, X_1, _mu_0, _lambda_0,
+                                             _kappa_0, _nu_0);
+        double lp_k2 = log(Nk[k2]) + lgniwpp(Y, X_2, _mu_0, _lambda_0,
+                                             _kappa_0, _nu_0);
 
         auto C = logsumexp({lp_k1, lp_k2});
 
@@ -210,7 +303,8 @@ void DPGMM::__restricted__init(vector<size_t> &Z, vector<double> &Nk, size_t k1,
 }
 
 
-double DPGMM::__restricted_gibbs_sweep(vector<size_t> &Z, vector<double> &Nk, size_t k1, size_t k2,
+double DPGMM::__restricted_gibbs_sweep(vector<size_t> &Z, vector<double> &Nk,
+                                       size_t k1, size_t k2,
     vector<size_t> sweep_indices, const vector<size_t> &Z_final)
 {
     std::uniform_real_distribution<double> rand(0.0, 1.0);
@@ -240,8 +334,10 @@ double DPGMM::__restricted_gibbs_sweep(vector<size_t> &Z, vector<double> &Nk, si
         auto X_1 = fetch_rows(_X, idx_1);
         auto X_2 = fetch_rows(_X, idx_2);
 
-        double lp_k1 = lcrp_1 + lgniwpp(Y, X_1, _mu_0, _lambda_0, _kappa_0, _nu_0);
-        double lp_k2 = lcrp_2 + lgniwpp(Y, X_2, _mu_0, _lambda_0, _kappa_0, _nu_0);
+        double lp_k1 = lcrp_1 + lgniwpp(Y, X_1, _mu_0, _lambda_0, _kappa_0,
+                                        _nu_0);
+        double lp_k2 = lcrp_2 + lgniwpp(Y, X_2, _mu_0, _lambda_0, _kappa_0,
+                                        _nu_0);
 
         auto C = logsumexp({lp_k1, lp_k2});
 
@@ -268,10 +364,10 @@ double DPGMM::__restricted_gibbs_sweep(vector<size_t> &Z, vector<double> &Nk, si
 }
 
 
-// ________________________________________________________________________________________________
+// ____________________________________________________________________________
 // Gibbs items
-// ````````````````````````````````````````````````````````````````````````````````````````````````
-void DPGMM::__update_gibbs()
+// ````````````````````````````````````````````````````````````````````````````
+void DPGMM::__update_gibbs(double &logp_trns)
 {
     std::shuffle(_row_list.begin(), _row_list.end(), _rng);
     for(auto row : _row_list){
@@ -295,7 +391,8 @@ void DPGMM::__update_gibbs()
 
         if(not is_singleton){
             std::vector<size_t> idx;
-            for(size_t i = 0; i < _Z.size(); ++i) if (_Z[i] == k_a and i != row) idx.push_back(i);
+            for(size_t i = 0; i < _Z.size(); ++i)
+                if (_Z[i] == k_a and i != row) idx.push_back(i);
             // remove from current component and calculate p
             auto Xk = fetch_rows(_X, idx);
             ASSERT_EQUAL(std::cout, Xk.n_rows, _Nk[k_a]-1);
@@ -309,7 +406,8 @@ void DPGMM::__update_gibbs()
         for(size_t k_b = 0; k_b < _K; ++k_b){
             if(k_b != k_a){
                 std::vector<size_t> idx;
-                for(size_t i = 0; i < _n; ++i) if (_Z[i] == k_b) idx.push_back(i);
+                for(size_t i = 0; i < _n; ++i)
+                    if (_Z[i] == k_b) idx.push_back(i);
 
                 auto Xk = fetch_rows(_X, idx);
                 ASSERT_EQUAL(std::cout, Xk.n_rows, _Nk[k_b]);
@@ -317,8 +415,14 @@ void DPGMM::__update_gibbs()
             }
         }
 
+        // normalize ps
+        double lz = logsumexp(ps);
+        for (auto &lp : ps) lp -= lz;
+        // TODO: Tell lpflip that the probabilities are normalized
         size_t k_b = lpflip(ps, _rng);
         ASSERT(std::cout, k_b <= _K);
+
+        logp_trns += ps[k_b];
 
         // clean up
         if(k_b != k_a){
@@ -338,7 +442,9 @@ void DPGMM::__update_gibbs()
         }
  
         _K = _Nk.size();
-        ASSERT_EQUAL(std::cout, *max_element(_Z.begin(), _Z.end()), _Nk.size()-1);
-        ASSERT_EQUAL(std::cout, std::accumulate(_Nk.begin(), _Nk.end(), 0), _Z.size());
+        ASSERT_EQUAL(std::cout, *max_element(_Z.begin(), _Z.end()),
+                     _Nk.size()-1);
+        ASSERT_EQUAL(std::cout, std::accumulate(_Nk.begin(), _Nk.end(), 0),
+                     _Z.size());
     }
 }
