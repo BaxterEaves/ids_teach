@@ -28,9 +28,12 @@ from progressbar import ProgressBar
 from progressbar import ETA
 from progressbar import RotatingMarker
 from scipy.misc import logsumexp
+from math import log
 
 import matplotlib.pyplot as plt
 import seaborn as sns
+
+sns.set_context('paper')
 
 
 NIW_ML_ENUMERATE = 0
@@ -167,7 +170,10 @@ class Teacher(object):
         for i, k in enumerate(self.target['assignment']):
             mu_k, sigma_k = self.target['parameters'][k]
             self.X[i, :] = np.random.multivariate_normal(mu_k, sigma_k)
+
         self.logp = self.evaluate_probability(self.X)
+        self.max_logp = float('-Inf')
+        self.max_data = None
 
     def evaluate_probability(self, X):
         """
@@ -220,7 +226,7 @@ class Teacher(object):
         return numer-denom
 
     def mh(self, n, burn=200, lag=50, plot_diagnostics=False,
-           datum_jitter=False):
+           datum_jitter=False, annealing_schedule=None):
         """
         Use Metropolis-Hastings (MH) sampling to generate data samples
 
@@ -238,18 +244,29 @@ class Teacher(object):
             If False (default), at each iteration, the proposal distribution
             perturbs the entire dataset; otherwise perturbs a single randomly-
             selected datum.
+        annealing_schedule : function(t, T), optional
+            A function of the current iteration, t, and the number of total
+            iterations, T. annealing_schedule(T, T) should be equal to 1. The
+            default annealing schedule is 1 at every iteration.
         """
+        if annealing_schedule is None:
+            annealing_schedule = lambda t, T: 1.0
+
         total_iters = 0
+        max_iters = burn + n*lag
+
         widgets = [ETA(), ' ', RotatingMarker()]
         pbar = ProgressBar(widgets=widgets, maxval=burn+lag*n)
         pbar.start()
+
         for _ in range(burn):
+            T = annealing_schedule(total_iters+1, max_iters)
             # sample new data
             X_prime = utils.jitter_data(np.copy(self.X), self.t_std,
                                         datum_jitter)
             logp_prime = self.evaluate_probability(X_prime)
 
-            if np.log(np.random.rand()) < logp_prime - self.logp:
+            if log(np.random.rand()) < T*(logp_prime - self.logp):
                 self.__accept_data(X_prime, logp_prime)
 
             total_iters += 1
@@ -264,11 +281,12 @@ class Teacher(object):
         for itr in range(n):
             # sample new data
             for _ in range(lag):
+                T = annealing_schedule(total_iters, max_iters)
                 X_prime = utils.jitter_data(np.copy(self.X), self.t_std,
                                             datum_jitter)
                 logp_prime = self.evaluate_probability(X_prime)
 
-                if np.log(np.random.rand()) < logp_prime - self.logp:
+                if log(np.random.rand()) < T*(logp_prime - self.logp):
                     self.__accept_data(X_prime, logp_prime)
                 total_iters += 1
                 pbar.update(total_iters)
@@ -293,6 +311,9 @@ class Teacher(object):
         self.data = []
         self.logps = []
 
+    def get_best_set(self):
+        return self.max_data, self.max_logp
+
     def get_stacked_data(self):
         """
         Returns the data as a single numpy array along with a n*k-length list
@@ -314,7 +335,9 @@ class Teacher(object):
             'target': self.target,
             'labels': labels,
             'X': self.X,
-            'logp': self.logp
+            'logp': self.logp,
+            'max_logp': self.max_logp,
+            'max_data': self.max_data,
         }
         pickle.dump(to_save, open(filename, "wb"))
 
@@ -330,6 +353,9 @@ class Teacher(object):
         """
         self.X = X_prime
         self.logp = logp_prime
+        if self.logp > self.max_logp:
+            self.max_logp = self.logp
+            self.max_data = np.copy(self.X)
 
     def __collect_data(self):
         """
