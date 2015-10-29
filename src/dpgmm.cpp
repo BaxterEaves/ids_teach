@@ -31,7 +31,12 @@ double DPGMM::fit(size_t n, double sm_prop, size_t num_sm_sweeps, size_t sm_burn
         } else {
             __update_gibbs(logp_trns);
         }
-        _logp_itr.push_back(logp());
+        double lp = logp();
+        if (lp > _lp_max){
+            _lp_max = lp;
+            _Z_max = _Z;
+        }
+        _logp_itr.push_back(lp);
         _K_itr.push_back(_K);
     }
 
@@ -65,6 +70,16 @@ vector<size_t> DPGMM::predict(arma::mat Y)
         prediction.push_back(k);
     }
     return prediction;
+}
+
+
+void DPGMM::set_assignment(vector<size_t> asgmnt){
+    _Z = asgmnt;
+    _K = *std::max_element(asgmnt.begin(), asgmnt.end())+1;
+    _Nk.resize(_K+1, 0);
+    std::fill(_Nk.begin(), _Nk.end(), 0);
+
+    for (auto &z : _Z) ++_Nk[z];
 }
 
 

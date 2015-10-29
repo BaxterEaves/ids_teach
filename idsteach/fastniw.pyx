@@ -50,6 +50,7 @@ cdef extern from "dpgmm.hpp":
                  size_t sm_burn)
 
         double seqinit(size_t n_sweeps)
+        void set_assignment(vector[size_t] asgmnt)
 
         vector[size_t] predict(vector[vector[double]])
 
@@ -58,7 +59,9 @@ cdef extern from "dpgmm.hpp":
         size_t get_K()
 
         vector[size_t] get_ks()
+        vector[size_t] get_z_max()
         vector[double] get_logps()
+        double get_logp_max()
 
 
 cdef extern from "niw_mmml.hpp":
@@ -107,6 +110,9 @@ cdef class PyDPGMM:
         logp = self.thisptr.seqinit(n_sweeps)
         return logp
 
+    def set_assignment(self, asgmnt):
+        self.thisptr.set_assignment(asgmnt)
+
     def fit(self, n_iter=1, sm_prop=.1, num_sm_sweeps=5, sm_burn=10):
         """
         Runs n_iter Gibbs sweeps on the data and returns the assignment vector.
@@ -126,6 +132,10 @@ cdef class PyDPGMM:
         Z = np.array(self.thisptr.get_Z(), dtype=int)
         return Z
 
+    def get_Z_max(self):
+        Z = np.array(self.thisptr.get_z_max(), dtype=int)
+        return Z
+
     def get_K(self):
         return self.thisptr.get_K()
 
@@ -136,6 +146,10 @@ cdef class PyDPGMM:
     def get_logps(self):
         logps = np.array(self.thisptr.get_logps(), dtype=float)
         return logps
+
+    def get_logp_max(self):
+        logp_max = self.thisptr.get_logp_max()
+        return logp_max
 
 
 def __check_2d_and_reshape(X):

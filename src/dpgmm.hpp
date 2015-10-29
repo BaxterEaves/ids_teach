@@ -55,6 +55,9 @@ public:
 
         _logp_itr.push_back(logp());
         _K_itr.push_back(_K);
+
+        _Z_max = _Z;
+        _lp_max = logp();
     }
 
     DPGMM(std::vector<std::vector<double>> X, std::vector<double> mu_0, 
@@ -85,8 +88,13 @@ public:
 
         _logp_itr.push_back(logp());
         _K_itr.push_back(_K);
+
+        _Z_max = _Z;
+        _lp_max = logp();
     }
     double seqinit(size_t n_sweeps); 
+
+    void set_assignment(std::vector<size_t> asgmnt);
 
     double fit(size_t n_iter, double sm_prop, size_t num_sm_sweeps,
              size_t sm_burn);
@@ -100,6 +108,8 @@ public:
 
     std::vector<double> get_logps(){return _logp_itr;};
     std::vector<size_t> get_ks(){return _K_itr;};
+    std::vector<size_t> get_z_max(){return _Z_max;};
+    double get_logp_max(){return _lp_max;};
 
     double logp();
 
@@ -150,6 +160,11 @@ private:
     std::vector<double> _logp_itr;
     // Number of components for each iteration
     std::vector<size_t> _K_itr;
+
+    // highest logp
+    double _lp_max;
+    // best assignment vector
+    std::vector<size_t> _Z_max;
 
 };
 
