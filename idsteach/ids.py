@@ -25,7 +25,7 @@ import pandas as pd
 import copy
 import random
 
-sns.set_palette("gray")
+# sns.set_palette("gray")
 
 # FIXME: get relpath
 DEFAULT_HILLENBRAND = '../data/hillenbrand.csv'
@@ -409,15 +409,17 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
     if not isinstance(formants, (list, np.ndarray)):
         raise TypeError("formants must be a list or ndarray")
 
-    fontsize = 14
+    fontsize = 10
     if grayscale:
-        # FIXME: colors aren't so great
-        color_opt = 'black'
-        color_ads = 'gray'
-        font_color = 'white'
+        color_ads, _, color_opt = sns.color_palette('Greys', 3)
+        font_color_teach = 'white'
+        font_color_orig = 'black'
+        alpha = .7
     else:
         color_ads, _, color_opt = sns.color_palette('colorblind', 3)
         font_color = 'white'
+        font_color_orig = 'white'
+        alpha = .2
 
     def cov_filter_2d(cov, formants):
         out = np.zeros((2, 2))
@@ -441,14 +443,14 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
         opt_cov = cov_filter_2d(np.cov(teacher_data[i], rowvar=0), formants)
 
         utils.plot_cov_ellipse(ads_cov, ads_mean, color=color_ads,
-                               ec=color_ads, lw=1, alpha=.2, nstd=nstd)
+                               ec=color_ads, lw=1, alpha=alpha, nstd=nstd)
         utils.plot_cov_ellipse(opt_cov, opt_mean, color=color_opt,
-                               ec=color_opt, lw=1, alpha=.2, nstd=nstd)
+                               ec=color_opt, lw=1, alpha=alpha, nstd=nstd)
 
         plt.scatter(opt_data[:, formants[0]], opt_data[:, formants[1]],
-                    color=color_opt, alpha=.5)
+                    color=color_opt, alpha=1)
         plt.scatter(ads_data[:, formants[0]], ads_data[:, formants[1]],
-                    color=color_ads, alpha=.5)
+                    color=color_ads, alpha=1)
 
         if i != 0:
             plt.scatter(opt_mean[0], opt_mean[1], color=color_opt, s=12**2,
@@ -462,9 +464,9 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
                         zorder=7, label='Original')
 
         symbol = hillenbrand_data()[phoneme]['unicode']
-        kwargs_opt = dict(fontsize=fontsize, color=font_color, ha='center',
+        kwargs_opt = dict(fontsize=fontsize, color=font_color_teach, ha='center',
                           va='baseline', zorder=10)
-        kwargs_ads = dict(fontsize=fontsize, color=font_color, ha='center',
+        kwargs_ads = dict(fontsize=fontsize, color=font_color_orig, ha='center',
                           va='baseline', zorder=8)
 
         plt.text(ads_mean[0], ads_mean[1], symbol, **kwargs_ads)
@@ -472,6 +474,10 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
 
     plt.xlabel('F%i (Hz)' % (formants[0]+1,))
     plt.ylabel('F%i (Hz)' % (formants[1]+1,))
+    for tick in  plt.gca().xaxis.get_major_ticks():
+        tick.label.set_fontsize(8)
+    for tick in  plt.gca().yaxis.get_major_ticks():
+        tick.label.set_fontsize(8)
 
     if legend:
         plt.legend(loc=0)
@@ -519,7 +525,7 @@ def plot_phoneme_articulation(teacher_data, target_model, labels, ax=None,
         pair_labels.append(pair_label)
         if labels[phoneme_1] in corner_vowels and \
                 labels[phoneme_2] in corner_vowels:
-            bar_colors.append('#8899aa')
+            bar_colors.append('#999999')
         else:
             bar_colors.append('#333333')
 
@@ -549,7 +555,7 @@ def plot_phoneme_articulation(teacher_data, target_model, labels, ax=None,
     label_x = bar_x+0.5
     plt.bar(bar_x, delta_means, yerr=delta_stds, color=bar_colors,
             edgecolor='none')
-    plt.plot([-.2, num_phoneme_pairs], [0, 0], lw=.5)
+    plt.plot([-.2, num_phoneme_pairs], [0, 0], lw=.5, c='#333333')
     ax.set_xlim([-.2, num_phoneme_pairs])
     ax.set_xticks(label_x)
     ax.set_xticklabels(pair_labels, rotation='vertical', fontsize=12)
@@ -657,6 +663,9 @@ def plot_phoneme_variation(teacher_data, target_model, labels):
         ax.set_xticks(np.arange(num_phonemes)+.5)
         if plot_nums[i] > 1:
             ax.set_yticklabels([])
+        else:
+            for tick in ax.yaxis.get_major_ticks():
+                tick.label.set_fontsize(8)
     #     if (plot_nums[i]-1) % num_dims:
     #         ax.set_yticklabels([])
     #         ax.set_ylabel('')
