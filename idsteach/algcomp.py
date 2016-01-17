@@ -446,14 +446,18 @@ def ari_subset(data_n, category_list):
     return res_optimal, res_original
 
 
-def plot_single_result(df, ptype, axes, stat_type='KS'):
+def plot_single_result(df, ptype, axes, stat_type='KS', grayscale=False):
 
     def get_clip(x):
         s = np.std(x)
         m = np.mean(x)
         return [m-4.0*s, m+4.0*s]
 
-    c1, c3, c2 = sns.color_palette("colorblind", 3)
+    if grayscale:
+        c1, c3, c2 = sns.color_palette("Greys", 3)
+        c1 = '#f8f8f8'
+    else:
+        c1, c3, c2 = sns.color_palette("colorblind", 3)
 
     for j, alg in enumerate(algorithm_list):
         ari_orig = df['res_original'][alg]['ari']
@@ -532,25 +536,31 @@ def plot_single_result(df, ptype, axes, stat_type='KS'):
     return axes
 
 
-def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS'):
+def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS',
+                 grayscale=False):
     if ylabels is None:
         ylabels = ['Density']*len(filenames)
 
     if isinstance(Ns, float):
         Ns = [Ns]*len(filenames)
 
-    c1, c3, c2 = sns.color_palette("colorblind", 3)
+    if grayscale:
+        c1, c3, c2 = sns.color_palette("Greys", 3)
+        c1 = '#f8f8f8'
+    else:
+        c1, c3, c2 = sns.color_palette("colorblind", 3)
 
     ptype = 'kde'
 
     f, axes = plt.subplots(len(filenames), len(algorithm_list),
-                           figsize=(figwidth, figwidth/2.5))
+                           figsize=(figwidth, figwidth/1.5))
 
     dfs = [pickle.load(open(fname, 'rb'))[n] for n, fname in
            zip(Ns, filenames)]
 
     axes = tuple([plot_single_result(df, ptype, axes[i, :].tolist(),
-                 stat_type=stat_type) for i, df in enumerate(dfs)])
+                 stat_type=stat_type, grayscale=grayscale)
+                 for i, df in enumerate(dfs)])
 
     y_l = min([min([ax.get_ylim()[0] for ax in axis_row]) for axis_row
                in axes])
@@ -604,8 +614,9 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
     N = sorted(N)
 
     for i, n in enumerate(N):
-        f, axes = plt.subplots(1, len(algorithm_list), figsize=(24, 24/6))
+        f, axes = plt.subplots(1, len(algorithm_list), figsize=(7.5, 5.5))
         f.set_facecolor('white')
+        f.tight_layout()
 
         axes = plot_single_result(data[n], type, axes)
 
