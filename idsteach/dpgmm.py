@@ -18,12 +18,12 @@ from math import log
 import numpy as np
 import random
 import copy
-import sys
 
 from scipy.misc import logsumexp
 from idsteach.utils import lpflip
 from idsteach.utils import lcrp
 from idsteach.utils import crp_gen
+
 
 def check_partition_integrity(Z, Nk):
     """
@@ -39,7 +39,7 @@ def check_partition_integrity(Z, Nk):
     if max(Z) != len(Nk)-1:
         errors += 'max Z ({0}) should be one less than the number of bins in Nk ({1}).\n'.format(max(Z), Nk)
     for k, num_k in enumerate(Nk):
-        if len(np.nonzero(Z==k)[0]) != num_k:
+        if len(np.nonzero(Z == k)[0]) != num_k:
             errors += 'Z ({0}), does not add to Nk ({1})\n'.format(Z, Nk)
             break
 
@@ -91,14 +91,12 @@ class DPGMM(object):
             Y = self.data[row, :]
             X_1 = self.data[idx_1, :]
             X_2 = self.data[idx_2, :]
-            try:
-                lp_k1 = log(float(Nk[k1])) + self.data_model.log_posterior_predictive(Y, X_1)
-                lp_k2 = log(float(Nk[k2])) + self.data_model.log_posterior_predictive(Y, X_2)
-            except:
-                import pdb; pdb.set_trace()
-            
+
+            lp_k1 = log(float(Nk[k1])) + self.data_model.log_posterior_predictive(Y, X_1)
+            lp_k2 = log(float(Nk[k2])) + self.data_model.log_posterior_predictive(Y, X_2)
+
             C = logsumexp([lp_k1, lp_k2])
-            
+
             if log(random.random()) < lp_k1 - C:
                 Nk[k1] += 1
                 Z[row] = k1
@@ -148,7 +146,6 @@ class DPGMM(object):
                 Nk[k_a] -= 1
                 Nk[k_b] += 1
 
-
             if k_b == k1:
                 lp_split += lp_k1 - C
             else:
@@ -160,7 +157,6 @@ class DPGMM(object):
             return Z, Nk, lp_split
         else:
             return lp_split
-
 
     def __transition_row_gibbs(self, row):
         """
@@ -181,7 +177,7 @@ class DPGMM(object):
         else:
             ps[k_a] = self.crp_alpha
         ps = np.log(ps)
-        
+
         if not is_singleton:
             idx = [i for i in np.nonzero(self.Z == k_a)[0].tolist() if i != row]
             ps[k_a] += self.data_model.log_posterior_predictive(Y, self.data[idx, :])
@@ -254,7 +250,6 @@ class DPGMM(object):
 
         Z_launch, Nk_launch = self.__restricted_init(Z_launch, Nk_launch, k1_launch, k2_launch,
                                                      sweep_indices)
-        Q_launch = 0
         Q = 0
         for sweep in range(num_sm_sweeps):
             Z_launch, Nk_launch, Q = self.__restricted_gibbs_sweep(Z_launch, Nk_launch, k1_launch,
@@ -277,8 +272,6 @@ class DPGMM(object):
             # merge proposal
             Z_merge = copy.copy(self.Z)
             Nk_merge = copy.copy(self.Nk)
-            k1_merge = k2
-            k2_merge = k2
 
             Z_merge[row_1] = k2
             for idx in sweep_indices:
@@ -288,9 +281,6 @@ class DPGMM(object):
             del Nk_merge[k1]
             Z_merge[np.nonzero(Z_merge > k1)[0]] -= 1
 
-            # if k2_merge > k1:
-            #     k2_merge -= 1
-    
             Q = self.__restricted_gibbs_sweep(Z_launch, Nk_launch, k1_launch, k2_launch,
                                               sweep_indices, Z_final=self.Z)
 
@@ -309,8 +299,8 @@ class DPGMM(object):
                     '__transition_split_merge (merge reject): partition check failed'
 
     def __transition(self, sm_prop=0.0, num_sm_sweeps=5):
-        """ 
-        Transition the component assignment. 
+        """
+        Transition the component assignment
 
         Kwargs:
             sm_prop (float<0,1>):  proportion of iterations that use split-merge
@@ -356,7 +346,7 @@ class DPGMM(object):
             x = X[row, :]
             ps = np.copy(log_crp)
             for k in range(self.K):
-                Y = self.data[np.nonzero(self.Z==k)[0], :]
+                Y = self.data[np.nonzero(self.Z == k)[0], :]
                 ps[k] += self.data_model.log_posterior_predictive(x, Y)
             Z_X[row] = np.argmax(ps)
 
@@ -371,11 +361,11 @@ class DPGMM(object):
         n_X = X.shape[0]
 
         log_crp = np.log(np.array(self.Nk + [self.crp_alpha]))-log(self._n+self.crp_alpha)
-        log_ps = np.zeros((n_x, self.K+1))
+        log_ps = np.zeros((n_X, self.K+1))
 
         for k in range(self.K):
             log_ps[:, k] = log_crp[k]
-            Y = self.data[np.nonzero(self.Z==k)[0], :]
+            Y = self.data[np.nonzero(self.Z == k)[0], :]
             for row in range(n_X):
                 x = X[row, :]
                 log_ps[row, k] += self.data_model.log_posterior_predictive(x, Y)
@@ -386,4 +376,3 @@ class DPGMM(object):
             log_ps[row, -1] += self.data_model.log_marginal_likelihood(x) + log_crp[-1]
 
         return logsumexp(log_ps, axis=1)
-
