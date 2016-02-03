@@ -319,13 +319,14 @@ class Teacher(object):
         Returns the data as a single numpy array along with a n*k-length list
         labeling each datum
         """
-        Z = [0]*self._n
         data = np.copy(self.data[0])
+        Z = [0]*len(self.data[0])
 
         for i in range(1, len(self.data)):
-            Z += [i]*self._n
             data = np.vstack((data, np.copy(self.data[i])))
+            Z += [i]*len(self.data[i])
 
+        assert data.shape[0] == len(Z)
         return data, Z
 
     def save(self, filename, labels=None):

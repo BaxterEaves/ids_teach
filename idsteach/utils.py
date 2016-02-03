@@ -37,6 +37,8 @@ from math import log
 
 ITERATIONS = 1000
 
+sns.set_context('paper')
+
 
 def cohen_d(a, b):
     top = (np.mean(a) - np.mean(b))
