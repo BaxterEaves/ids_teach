@@ -35,18 +35,19 @@ else:
     print('Using pre-built cython files.')
     ext = '.cpp'
 
-extensions = [Extension("idsteach.fastniw", 
+extensions = [Extension("idsteach.fastniw",
                         sources=["idsteach/fastniw"+ext, "src/dpgmm.cpp"],
                         libraries=['armadillo'],
-                        extra_compile_args=['-std=c++11','-DNIDSDEBUG', '-DARMA_NO_DEBUG'],
+                        extra_compile_args=['-std=c++11',
+                                            # '-DNIDSDEBUG',
+                                            '-DARMA_NO_DEBUG'],
                         include_dirs=['src'],
-                        language="c++")
-                    ]
+                        language="c++")]
 
 if USE_CYTHON:
     extensions = cythonize(extensions)
 
-install_reqs = parse_requirements('requirements.txt')
+install_reqs = parse_requirements('requirements.txt', session=False)
 reqs = [str(ir.req) for ir in install_reqs]
 
 setup(
@@ -56,7 +57,7 @@ setup(
     url='TBA',
     long_description='TBA.',
     install_requires=reqs,
-    package_dir={'idsteach':'idsteach/'},
+    package_dir={'idsteach': 'idsteach/'},
     packages=find_packages(exclude=['testdpgmm.py']),
     ext_modules=extensions,
     cmdclass=cmdclass
