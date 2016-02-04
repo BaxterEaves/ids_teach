@@ -103,6 +103,7 @@ class Teacher(object):
         self.crp_alpha = crp_alpha
         self._d = target['d']
         self._n = n
+        self._n_collected = 0
 
         # Set up the partitons for work-sharing. Colelct partition seeds at
         # equal interval for each thread so each thread can generate its own
@@ -310,6 +311,7 @@ class Teacher(object):
         """
         self.data = []
         self.logps = []
+        self._n_collected = 0
 
     def get_best_set(self):
         return self.max_data, self.max_logp
@@ -320,13 +322,13 @@ class Teacher(object):
         labeling each datum
         """
         data = np.copy(self.data[0])
-        Z = [0]*len(self.data[0])
+        Z = [0]*self._n_collected
 
         for i in range(1, len(self.data)):
             data = np.vstack((data, np.copy(self.data[i])))
-            Z += [i]*len(self.data[i])
+            Z += [i]*self._n_collected
 
-        assert data.shape[0] == len(Z)
+        assert len(data) == len(Z)
         return data, Z
 
     def save(self, filename, labels=None):
@@ -362,6 +364,7 @@ class Teacher(object):
         """
         Bin the current data and logp values.
         """
+        self._n_collected += 1
         if self.data is None:
             self.data = [None for _ in range(len(self.target['parameters']))]
             for i, k in enumerate(self.target['assignment']):
