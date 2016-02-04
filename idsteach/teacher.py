@@ -322,11 +322,13 @@ class Teacher(object):
         labeling each datum
         """
         data = np.copy(self.data[0])
-        Z = [0]*self._n_collected
+        nk = np.sum(np.nonzero(self.target['assignment'] == 0))
+        Z = [0]*self._n_collected*nk
 
         for i in range(1, len(self.data)):
+            nk = np.sum(np.nonzero(self.target['assignment'] == i))
             data = np.vstack((data, np.copy(self.data[i])))
-            Z += [i]*self._n_collected
+            Z += [i]*self._n_collected*nk
 
         assert len(data) == len(Z)
         return data, Z
