@@ -24,11 +24,11 @@ import seaborn as sns
 import pandas as pd
 import copy
 import random
+import os
 
-# sns.set_palette("gray")
+DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_HILLENBRAND = os.path.join(DIR, '../data/hillenbrand.csv')
 
-# FIXME: get relpath
-DEFAULT_HILLENBRAND = '../data/hillenbrand.csv'
 # _____________________________________________________________________________
 # Data taken from hillenbrand (F1 and F2)
 # `````````````````````````````````````````````````````````````````````````````
@@ -417,7 +417,6 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
         alpha = .7
     else:
         color_ads, _, color_opt = sns.color_palette('colorblind', 3)
-        font_color = 'white'
         font_color_orig = 'white'
         alpha = .2
 
@@ -435,8 +434,8 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
         ads_mean = target_model['parameters'][i][0][formants]
         ads_cov = cov_filter_2d(target_model['parameters'][i][1], formants)
 
-        # NOTE: Plot 48 randomly-selected points from optimal data because
-        # the Hillenbrand data have ~48 points per phoneme
+        # Plot 48 randomly-selected points from optimal data because the
+        # Hillenbrand data have ~48 points per phoneme
         subset = random.sample(range(teacher_data[i].shape[0]), 48)
         opt_data = teacher_data[i][subset, :]
         opt_mean = np.mean(teacher_data[i][:, formants], axis=0)
@@ -464,19 +463,19 @@ def plot_phoneme_models(teacher_data, target_model, labels, formants=[0, 1],
                         zorder=7, label='Original')
 
         symbol = hillenbrand_data()[phoneme]['unicode']
-        kwargs_opt = dict(fontsize=fontsize, color=font_color_teach, ha='center',
-                          va='baseline', zorder=10)
-        kwargs_ads = dict(fontsize=fontsize, color=font_color_orig, ha='center',
-                          va='baseline', zorder=8)
+        kwargs_opt = dict(fontsize=fontsize, color=font_color_teach,
+                          ha='center', va='baseline', zorder=10)
+        kwargs_ads = dict(fontsize=fontsize, color=font_color_orig,
+                          ha='center', va='baseline', zorder=8)
 
         plt.text(ads_mean[0], ads_mean[1], symbol, **kwargs_ads)
         plt.text(opt_mean[0], opt_mean[1], symbol, **kwargs_opt)
 
     plt.xlabel('F%i (Hz)' % (formants[0]+1,))
     plt.ylabel('F%i (Hz)' % (formants[1]+1,))
-    for tick in  plt.gca().xaxis.get_major_ticks():
+    for tick in plt.gca().xaxis.get_major_ticks():
         tick.label.set_fontsize(8)
-    for tick in  plt.gca().yaxis.get_major_ticks():
+    for tick in plt.gca().yaxis.get_major_ticks():
         tick.label.set_fontsize(8)
 
     if legend:
