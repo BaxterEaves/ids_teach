@@ -149,6 +149,7 @@ double DPGMM::seqinit(size_t n_sweeps){
     return logp;
 }
 
+
 vector<size_t> DPGMM::predict(vector<vector<double>> Y)
 {
     return predict(array_to_mat(Y));
