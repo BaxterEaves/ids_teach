@@ -87,7 +87,7 @@ class Teacher(object):
         if approx is not False:
             self._approx = APPROX_KEY[approx.lower()]
 
-        if self._use_mp and self._approx:
+        if self._use_mp and approx:
             print('No multiprocessing needd for approximation. '
                   'setting use_mp=False.')
             self._use_mp = False
@@ -322,13 +322,11 @@ class Teacher(object):
         labeling each datum
         """
         data = np.copy(self.data[0])
-        nk = np.sum(np.nonzero(self.target['assignment'] == 0))
-        Z = [0]*self._n_collected*nk
+        Z = [0]*self.data[0].shape[0]
 
         for i in range(1, len(self.data)):
-            nk = np.sum(np.nonzero(self.target['assignment'] == i))
             data = np.vstack((data, np.copy(self.data[i])))
-            Z += [i]*self._n_collected*nk
+            Z += [i]*self.data[i].shape[0]
 
         assert len(data) == len(Z)
         return data, Z
