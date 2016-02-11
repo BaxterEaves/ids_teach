@@ -27,17 +27,19 @@ from idsteach.models import NormalInverseWishart
 import pickle
 import time
 
+sns.set_context('paper')
+
 
 def rebuild_data(filename=None, f3=False):
     """
     FIXME: Docstring
     """
     data_out = dict()
-    # long run
-    target_model, labels = ids.gen_model(which_phonemes=ids.all_the_vowels, f3=f3)
-    # target_model, labels = ids.gen_model(which_phonemes=ids.corner_vowels)
+    target_model, labels = ids.gen_model(which_phonemes=ids.all_the_vowels,
+                                         f3=f3)
     data_model = NormalInverseWishart.with_vague_prior(target_model)
-    t = Teacher(target_model, data_model, 1.0, t_std=40, use_mp=True, fast_niw=True)
+    t = Teacher(target_model, data_model, 1.0, t_std=40, use_mp=True,
+                fast_niw=True)
     t.mh(2000, burn=1000, lag=100)
 
     data_out['labels'] = labels
@@ -46,7 +48,8 @@ def rebuild_data(filename=None, f3=False):
     data_out['short_runs_data'] = []
 
     for _ in range(10):
-        t = Teacher(target_model, data_model, 1.0, t_std=40, use_mp=True, fast_niw=True)
+        t = Teacher(target_model, data_model, 1.0, t_std=40, use_mp=True,
+                    fast_niw=True)
         t.mh(1000, burn=300, lag=20)
         data_out['short_runs_data'].append(t.data)
 
@@ -66,8 +69,6 @@ def reproduce_paper(filename=None):
     dataset = pickle.load(open(filename, "rb"))
     short_runs_data = dataset['short_runs_data']
     long_run_data = dataset['long_run_data']
-    # short_run_z = dataset['short_run_z']
-    # long_run_z = dataset['long_run_z']
 
     target = dataset['target']
     labels = dataset['labels']
@@ -85,7 +86,8 @@ def reproduce_paper(filename=None):
 
 def example():
     """
-    Runs a live example showing how incresing variance can occur as a result of teaching
+    Runs a live example showing how incresing variance can occur as a result
+    of teaching
     """
     n = 500
     cov_a = np.array([[3, 0], [0, 1]], dtype=np.dtype(float))
@@ -117,10 +119,11 @@ def example():
                         np.random.multivariate_normal(mean_b, cov_b, n)))
     X_opt, _ = t.get_stacked_data()
 
-    #plot
     plt.figure(tight_layout=True, facecolor='white')
-    plt.scatter(X_opt[:, 0], X_opt[:, 1], color='blue', alpha=.5, label='optimized')
-    plt.scatter(X_orig[:, 0], X_orig[:, 1], color='red', alpha=.5, label='original')
+    plt.scatter(X_opt[:, 0], X_opt[:, 1], color='blue', alpha=.5,
+                label='optimized')
+    plt.scatter(X_orig[:, 0], X_orig[:, 1], color='red', alpha=.5,
+                label='original')
     plt.legend(loc=0)
     plt.show()
 
@@ -128,10 +131,14 @@ def example():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Run examples')
-    parser.add_argument('--example', action='store_true', help='Do cross example')
-    parser.add_argument('--paperfigs', action='store_true', help='reproduce manuscript figures')
-    parser.add_argument('--rebuild', action='store_true', help='rebuild full dataset')
-    parser.add_argument('--filename', type=str, default=None, help='data file name')
+    parser.add_argument('--example', action='store_true',
+                        help='Do cross example')
+    parser.add_argument('--paperfigs', action='store_true',
+                        help='reproduce manuscript figures')
+    parser.add_argument('--rebuild', action='store_true',
+                        help='rebuild full dataset')
+    parser.add_argument('--filename', type=str, default=None,
+                        help='data file name')
 
     args = parser.parse_args()
 
@@ -149,4 +156,4 @@ if __name__ == '__main__':
         # TODO: give use the option to load in their own data
         reproduce_paper(args.filename)
 
-    # utils.what_do_you_think_about_the_stars_in_the_sky()
+    utils.what_do_you_think_about_the_stars_in_the_sky()
