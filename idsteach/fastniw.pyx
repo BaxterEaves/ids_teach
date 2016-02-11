@@ -62,6 +62,7 @@ cdef extern from "dpgmm.hpp":
         vector[size_t] get_z_max()
         vector[double] get_logps()
         double get_logp_max()
+        double logp()
 
 
 cdef extern from "niw_mmml.hpp":
@@ -147,6 +148,10 @@ cdef class PyDPGMM:
         logps = np.array(self.thisptr.get_logps(), dtype=float)
         return logps
 
+    def logp(self):
+        logp = self.thisptr.logp()
+        return logp
+
     def get_logp_max(self):
         logp_max = self.thisptr.get_logp_max()
         return logp_max
@@ -205,7 +210,7 @@ def pgibbs_estimator(X, data_model, crp_alpha, n_samples=100,
     Returns
     -------
     estimator : float
-        the Chibb estimator
+        the estimator
     """
     n_data = X.shape[0]
     logps = np.zeros(n_samples)
