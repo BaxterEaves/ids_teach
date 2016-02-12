@@ -83,10 +83,11 @@ class Teacher(object):
 
         self._use_mp = use_mp
         self._num_procs = mp.cpu_count()
-        self._fast_niw = fast_niw
         if approx is not False:
+            fast_niw = False
             self._approx = APPROX_KEY[approx.lower()]
 
+        self._fast_niw = fast_niw
         if self._use_mp and approx:
             print('No multiprocessing needd for approximation. '
                   'setting use_mp=False.')
