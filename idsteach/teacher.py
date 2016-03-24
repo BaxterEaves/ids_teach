@@ -22,7 +22,6 @@ from idsteach import models
 import pickle
 import copy
 
-from idsteach.bhc import bhc
 from idsteach import fastniw as fniw
 from progressbar import ProgressBar
 from progressbar import ETA
@@ -37,10 +36,9 @@ sns.set_context('paper')
 
 
 NIW_ML_ENUMERATE = 0
-NIW_ML_BHC = 1
-NIW_ML_PGIBBS = 2
+NIW_ML_PGIBBS = 1
 
-APPROX_KEY = {'bhc': NIW_ML_BHC, 'pgibbs': NIW_ML_PGIBBS}
+APPROX_KEY = {'pgibbs': NIW_ML_PGIBBS}
 
 
 class Teacher(object):
@@ -210,8 +208,6 @@ class Teacher(object):
             to_sum = mapper(fniw.niw_mmml_mp, args)
 
             denom = logsumexp(to_sum)
-        elif self._approx == NIW_ML_BHC:
-            _, denom = bhc(X, self.data_model, self.crp_alpha)
         elif self._approx == NIW_ML_PGIBBS:
             denom = fniw.pgibbs_estimator(X, self.data_model, self.crp_alpha,
                                           n_samples=1000)
