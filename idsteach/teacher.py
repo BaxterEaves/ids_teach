@@ -176,7 +176,7 @@ class Teacher(object):
         self.max_logp = float('-Inf')
         self.max_data = None
 
-    def evaluate_probability(self, X):
+    def evaluate_probability(self, X, return_parts=False):
         """
         Evaluate the probability of the data, X, given the optimal IGMM teacher
         model
@@ -189,12 +189,14 @@ class Teacher(object):
             mapper = lambda f, args: [res for res in map(f, args)]
 
         numer = 0
+        prior = 0
         for z, theta in enumerate(self.target['parameters']):
             Y = X[np.nonzero(self.target['assignment'] == z)[0], :]
             # the prior cancels out in the acceptance ratio so there is no need
-            # to calculate it.
+            # to calculate it unless return_parts is True.
             numer += self.data_model.log_likelihood(Y, *theta)
-            # \ + self.data_model.log_prior(*theta)
+            if return_parts:
+                prior += self.data_model.log_prior(*theta)
         numer += self.p_crp_true
 
         args = []
@@ -224,7 +226,10 @@ class Teacher(object):
 
             denom = logsumexp(to_sum)
 
-        return numer-denom
+        if return_parts:
+            return prior, numer, denom
+        else:
+            return numer-denom
 
     def mh(self, n, burn=200, lag=50, plot_diagnostics=False,
            datum_jitter=False, annealing_schedule=None):
