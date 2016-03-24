@@ -36,7 +36,13 @@ import sys
 import os
 
 import matplotlib.pyplot as plt
-import seaborn as sns  # never called explictly, but changes pyplot settings
+import seaborn as sns
+
+sns.set_context('paper')
+sns.set(rc={'axes.facecolor': '#cccccc', 'grid.color': '#dddddd'})
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+FILENAME = os.path.join(DIR, 'data', 'algcomp.pkl')
 
 # theses are the algorihtms we evaluate. Note that scikit implmentations of
 # vbgmm and dpgmm need some work, so I do not include them in analyses (I
@@ -446,7 +452,7 @@ def ari_subset(data_n, category_list):
     return res_optimal, res_original
 
 
-def plot_single_result(df, ptype, axes, stat_type='KS', grayscale=False):
+def plot_single_result(df, ptype, axes, stat_type='KS', grayscale=True):
 
     def get_clip(x):
         s = np.std(x)
@@ -536,7 +542,7 @@ def plot_single_result(df, ptype, axes, stat_type='KS', grayscale=False):
     return axes
 
 
-def plot_compare(filenames, Ns, ylabels=None, figwidth=15., stat_type='KS',
+def plot_compare(filenames, Ns, ylabels=None, figwidth=8.5, stat_type='KS',
                  grayscale=False):
     if ylabels is None:
         ylabels = ['Density']*len(filenames)
@@ -614,7 +620,7 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
     N = sorted(N)
 
     for i, n in enumerate(N):
-        f, axes = plt.subplots(1, len(algorithm_list), figsize=(7.5, 5.5))
+        f, axes = plt.subplots(1, len(algorithm_list), figsize=(7.5, 3.5))
         f.set_facecolor('white')
         f.tight_layout()
 
@@ -630,6 +636,7 @@ def plot_result(filename, type='kde', suptitle=None, base_filename=None):
             plt.savefig(filename, dpi=300)
         else:
             plt.show()
+
 
 if __name__ == '__main__':
     import argparse
@@ -654,35 +661,39 @@ if __name__ == '__main__':
     parser.add_argument('--flatten', action='store_true',
                         help='Remove f3 dimension (only applicable for '
                         'non-matlab data')
+    parser.add_argument('--plot_only', action='store_true',
+                        help='Plot existing data.')
 
     args = parser.parse_args()
 
-    if args.flatten and args.matlab_data:
-        raise ValueError('Cannot flatten matlab data')
+    if not args.plot_only:
+        if args.flatten and args.matlab_data:
+            raise ValueError('Cannot flatten matlab data')
 
-    target_model, labels = ids.gen_model(f3=(not args.matlab_data))
-    data_model = NormalInverseWishart.with_vague_prior(target_model)
+        target_model, labels = ids.gen_model(f3=(not args.matlab_data))
+        data_model = NormalInverseWishart.with_vague_prior(target_model)
 
-    if args.flatten:
-        target_model, data_model = utils.flatten_niw_model(target_model,
-                                                           data_model)
+        if args.flatten:
+            target_model, data_model = utils.flatten_niw_model(
+                target_model, data_model)
 
-    if args.multirun:
-        if args.matlab_data:
-            dirname = os.path.join('../data', 'ml_runs')
-            data = utils.multiple_matlab_csv_to_teacher_data(dirname)
+        if args.multirun:
+            if args.matlab_data:
+                dirname = os.path.join(DIR, '../data', 'ml_runs')
+                data = utils.multiple_matlab_csv_to_teacher_data(dirname)
+            else:
+                raise NotImplementedError('Must use multiple data sets when '
+                                          'using pandas')
         else:
-            raise NotImplementedError('Must use multiple data sets when '
-                                      'using pandas')
-    else:
-        if args.matlab_data:
-            dirname = os.path.join('../data', 'lrunml')
-            data = utils.matlab_csv_to_teacher_data(dirname)
-        else:
-            dirname = os.path.join('../data', 'ptn_runs')
-            data = utils.multiple_pandas_to_teacher_data(
-                dirname, remove_f3=args.flatten)
+            if args.matlab_data:
+                dirname = os.path.join(DIR, '../data', 'lrunml')
+                data = utils.matlab_csv_to_teacher_data(dirname)
+            else:
+                dirname = os.path.join(DIR, '../data', 'ptn_runs')
+                data = utils.multiple_pandas_to_teacher_data(
+                    dirname, remove_f3=args.flatten)
 
-    algcomp(data, target_model, data_model, args.num_examples, args.num_runs,
-            filename=args.filename)
+        algcomp(data, target_model, data_model, args.num_examples,
+                args.num_runs, filename=args.filename)
+
     plot_result(args.filename, args.plot_type, base_filename=args.base_figname)
