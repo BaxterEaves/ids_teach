@@ -438,18 +438,23 @@ def ari_subset(data_n, category_list):
     z_true = [data_n['z_true'][i] for i in idx]
     res_optimal = dict()
     res_original = dict()
+    res_cross = dict()
 
     for alg in algorithm_list:
         res_optimal[alg] = np.zeros(len(data_n['res_optimal'][alg]['ari']))
         res_original[alg] = np.zeros(len(data_n['res_original'][alg]['ari']))
+        res_cross[alg] = np.zeros(len(data_n['res_cross'][alg]['ari']))
 
         for i in range(len(data_n['res_optimal'][alg]['z'])):
             z_opt = [data_n['res_optimal'][alg]['z'][i][z] for z in idx]
             z_orig = [data_n['res_original'][alg]['z'][i][z] for z in idx]
+            z_cross = [data_n['res_cross'][alg]['z'][i][z] for z in idx]
+
             res_optimal[alg][i] = metrics.adjusted_rand_score(z_true, z_opt)
             res_original[alg][i] = metrics.adjusted_rand_score(z_true, z_orig)
+            res_cross[alg][i] = metrics.adjusted_rand_score(z_true, z_cross)
 
-    return res_optimal, res_original
+    return res_optimal, res_original, res_cross
 
 
 def plot_single_result(df, ptype, axes, stat_type='KS', grayscale=True):
