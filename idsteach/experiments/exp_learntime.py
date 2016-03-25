@@ -1,5 +1,6 @@
 
 import os
+import gzip
 import pandas
 import pickle
 
@@ -12,12 +13,12 @@ import seaborn as sns
 sns.set_context('paper')
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-FILENAME = os.path.join(DIR, 'data', 'algcomp-2048.pkl')
+FILENAME = os.path.join(DIR, 'data', 'algcomp-2048.pkl.gz')
 
 
 def ari_over_time_violin(algcomp_filename=FILENAME, log_x_scale=False,
                          alg='dpgmm', ax=None, set_ylim=False):
-    data = pickle.load(open(algcomp_filename, 'rb'))
+    data = pickle.load(gzip.GzipFile(algcomp_filename, 'r'))
     c1, c3, c2 = sns.color_palette("Greys", 3)
 
     if ax is None:
