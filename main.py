@@ -24,6 +24,8 @@ from idsteach import utils
 from idsteach.teacher import Teacher
 from idsteach.models import NormalInverseWishart
 from idsteach.utils import multiple_pandas_to_teacher_data
+from idsteach.experiments.exp_learntime import ari_over_time_violin
+from idsteach.experiments.exp_algcomp import plot_compare
 
 import pickle
 import time
@@ -85,26 +87,16 @@ def reproduce_paper():
     ids.plot_phoneme_models(tdatlst_f3[0], target_f3, labels,
                             formants=[0, 1], nstd=2,
                             legend=True, grayscale=True)
-
     plt.subplot2grid((2, 3), (0, 2))
     plt.title('B')
     ids.plot_phoneme_models(tdatlst_f3[0], target_f3, labels, formants=[1, 2],
                             nstd=2, grayscale=True)
-
     plt.subplot2grid((2, 3), (1, 2))
     plt.title('C')
     ids.plot_phoneme_models(tdatlst_f3[0], target_f3, labels, formants=[0, 2],
                             nstd=2, grayscale=True)
 
-    plt.savefig('samples.png', dpi=300)
-
-    # Variation (F1, F2, F3)
-    # ---------------------
-    plt.figure(tight_layout=True, facecolor='white', figsize=(9.5, 3.5,))
-    sns.set(rc={'axes.facecolor': '#e8e8e8'})
-    ids.plot_phoneme_variation(tdatlst_f3, target_f3, labels)
-
-    plt.savefig('variation.png', dpi=300)
+    plt.savefig('fig-1.png', dpi=300)
 
     # Articulation
     # ------------
@@ -115,14 +107,35 @@ def reproduce_paper():
     plt.title('A')
     indices = ids.plot_phoneme_articulation(tdatlst_f3, target_f3, labels,
                                             ax=ax1)
-
     ax2 = f.add_subplot(2, 1, 2)
     plt.title('B')
     ids.plot_phoneme_articulation(tdatlst_f2, target_f2, labels, ax=ax2,
                                   indices=indices)
     ax2.set_ylim(ax1.get_ylim())
 
-    plt.savefig('articulation.png', dpi=300)
+    plt.savefig('fig-2.png', dpi=300)
+
+    # Variation (F1, F2, F3)
+    # ---------------------
+    plt.figure(tight_layout=True, facecolor='white', figsize=(9.5, 3.5,))
+    sns.set(rc={'axes.facecolor': '#e8e8e8'})
+    ids.plot_phoneme_variation(tdatlst_f3, target_f3, labels)
+    plt.savefig('fig-3.png', dpi=300)
+
+    # ARI for different learning algorithms
+    ari_file_f3 = os.path.join(DATADIR, 'omnirunf3.pkl')
+    ari_file_f2 = os.path.join(DATADIR, '2FLearning_500ex.pkl')
+    ari_ylabels = ["ARI (F1, F2, F3)", "ARI (F1, F2)"]
+    sns.set(rc={'axes.facecolor': '#cccccc', 'grid.color': '#bbbbbb'})
+    plot_compare([ari_file_f3, ari_file_f2], [500, 500], ari_ylabels,
+                 grayscale=True)
+    plt.savefig('fig-4.png', dpi=300)
+
+    # DPGMM ARI as a funciton of the number of samples
+    # ------------------------------------------------
+    f = plt.figure(tight_layout=True, facecolor='white', figsize=(7.5, 3.5,))
+    ari_over_time_violin()
+    plt.savefig('fig-5.png', dpi=300)
 
 
 def example():
