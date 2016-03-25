@@ -64,18 +64,11 @@ To run (ad-hoc) tests of the C++ code:
 ```
 
 ### Reproducing the paper analyses
-**NOTE**: The data used in the paper is included in the repository so that users can quickly reproduce analyses. If you intend to simulate your own data (using `python main.py --rebuild`),please keep in mind that the original analyses took several days to complete.
+**NOTE**: The data used in the paper is included in the repository so that users can quickly reproduce analyses.
 
 To recreate the original paper figures:
 ```bash
 (ids)$ python main.py --paperfigs  # using default data
-(ids)$ python main.py --paperfigs --filename path/to/data.pkl  # using rebuilt data
-```
-
-To rerun the algorithm learning performance comparison (`FIXME: tablename`):
-```bash
-(ids)$ python main.py --algcomp  # using default data
-(ids)$ python main.py --algcomp --filename path/to/data.pkl  # using rebuilt data
 ```
 
 ### General use (generate a teaching set from an arbitrary target model)
