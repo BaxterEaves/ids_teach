@@ -80,7 +80,7 @@ def reproduce_paper():
     # Phoneme models and samples
     # --------------------------
     plt.figure(tight_layout=True, facecolor='white', figsize=(9.5, 6.34,))
-    sns.set(rc={'axes.facecolor': '#aaaaaa', 'grid.color': '#bbbbbb'})
+    sns.set(rc={'axes.facecolor': '#bbbbbb', 'grid.color': '#aaaaaa'})
 
     plt.subplot2grid((2, 3), (0, 0), rowspan=2, colspan=2)
     plt.title('A')
@@ -134,6 +134,7 @@ def reproduce_paper():
     # DPGMM ARI as a funciton of the number of samples
     # ------------------------------------------------
     f = plt.figure(tight_layout=True, facecolor='white', figsize=(7.5, 3.5,))
+    sns.set(rc={'axes.facecolor': '#eeeeee', 'grid.color': '#d8d8d8'})
     ari_over_time_violin()
     plt.savefig('fig-5.png', dpi=300)
 
