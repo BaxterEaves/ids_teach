@@ -23,11 +23,16 @@ from idsteach import ids
 from idsteach import utils
 from idsteach.teacher import Teacher
 from idsteach.models import NormalInverseWishart
+from idsteach.utils import multiple_pandas_to_teacher_data
 
 import pickle
 import time
+import os
 
 sns.set_context('paper')
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+DATADIR = os.path.join(DIR, 'data')
 
 
 def rebuild_data(filename=None, f3=False):
@@ -59,29 +64,65 @@ def rebuild_data(filename=None, f3=False):
     pickle.dump(data_out, open(filename, "wb"))
 
 
-def reproduce_paper(filename=None):
+def reproduce_paper():
     """
     Loads in data and reporoduces the manuscript figures.
     """
-    if filename is None:
-        filename = 'default_data.pkl'
+    dirname = os.path.join(DATADIR, 'ptn_runs')
+    tdatlst_f3 = [multiple_pandas_to_teacher_data(dirname)]
+    tdatlst_f2 = [multiple_pandas_to_teacher_data(dirname, remove_f3=True)]
 
-    dataset = pickle.load(open(filename, "rb"))
-    short_runs_data = dataset['short_runs_data']
-    long_run_data = dataset['long_run_data']
+    target_f3, labels = ids.gen_model(f3=True)
+    target_f2, _ = ids.gen_model(f3=False)
 
-    target = dataset['target']
-    labels = dataset['labels']
+    # Phoneme models and samples
+    # --------------------------
+    plt.figure(tight_layout=True, facecolor='white', figsize=(9.5, 6.34,))
+    sns.set(rc={'axes.facecolor': '#aaaaaa', 'grid.color': '#bbbbbb'})
 
-    plt.figure(tight_layout=True, facecolor='white')
+    plt.subplot2grid((2, 3), (0, 0), rowspan=2, colspan=2)
+    plt.title('A')
+    ids.plot_phoneme_models(tdatlst_f3[0], target_f3, labels,
+                            formants=[0, 1], nstd=2,
+                            legend=True, grayscale=True)
 
-    plt.subplot(3, 1, 1)
-    ids.plot_phoneme_models(long_run_data, target, labels)
-    plt.subplot(3, 1, 2)
-    ids.plot_phoneme_articulation(short_runs_data, target, labels)
-    plt.subplot(3, 1, 3)
-    ids.plot_phoneme_variation(short_runs_data, target, labels)
-    plt.show()
+    plt.subplot2grid((2, 3), (0, 2))
+    plt.title('B')
+    ids.plot_phoneme_models(tdatlst_f3[0], target_f3, labels, formants=[1, 2],
+                            nstd=2, grayscale=True)
+
+    plt.subplot2grid((2, 3), (1, 2))
+    plt.title('C')
+    ids.plot_phoneme_models(tdatlst_f3[0], target_f3, labels, formants=[0, 2],
+                            nstd=2, grayscale=True)
+
+    plt.savefig('samples.png', dpi=300)
+
+    # Variation (F1, F2, F3)
+    # ---------------------
+    plt.figure(tight_layout=True, facecolor='white', figsize=(9.5, 3.5,))
+    sns.set(rc={'axes.facecolor': '#e8e8e8'})
+    ids.plot_phoneme_variation(tdatlst_f3, target_f3, labels)
+
+    plt.savefig('variation.png', dpi=300)
+
+    # Articulation
+    # ------------
+    sns.set(rc={'axes.facecolor': '#e8e8e8', 'grid.color': '#ffffff'})
+    f = plt.figure(tight_layout=True, facecolor='white', figsize=(9.5, 4.75,))
+
+    ax1 = f.add_subplot(2, 1, 1)
+    plt.title('A')
+    indices = ids.plot_phoneme_articulation(tdatlst_f3, target_f3, labels,
+                                            ax=ax1)
+
+    ax2 = f.add_subplot(2, 1, 2)
+    plt.title('B')
+    ids.plot_phoneme_articulation(tdatlst_f2, target_f2, labels, ax=ax2,
+                                  indices=indices)
+    ax2.set_ylim(ax1.get_ylim())
+
+    plt.savefig('articulation.png', dpi=300)
 
 
 def example():
@@ -120,9 +161,9 @@ def example():
     X_opt, _ = t.get_stacked_data()
 
     plt.figure(tight_layout=True, facecolor='white')
-    plt.scatter(X_opt[:, 0], X_opt[:, 1], color='blue', alpha=.5,
+    plt.scatter(X_opt[:, 0], X_opt[:, 1], color='royalblue', alpha=.5,
                 label='optimized')
-    plt.scatter(X_orig[:, 0], X_orig[:, 1], color='red', alpha=.5,
+    plt.scatter(X_orig[:, 0], X_orig[:, 1], color='crimson', alpha=.5,
                 label='original')
     plt.legend(loc=0)
     plt.show()
@@ -154,6 +195,6 @@ if __name__ == '__main__':
     if args.paperfigs:
         print("Reproducing figures from loaded data...")
         # TODO: give use the option to load in their own data
-        reproduce_paper(args.filename)
+        reproduce_paper()
 
     utils.what_do_you_think_about_the_stars_in_the_sky()
