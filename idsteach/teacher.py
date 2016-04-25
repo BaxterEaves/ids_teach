@@ -324,11 +324,22 @@ class Teacher(object):
         labeling each datum
         """
         data = np.copy(self.data[0])
-        Z = [0]*self.data[0].shape[0]
+
+        if len(self.data[0].shape) == 1:
+            n_per = 1
+        else:
+            n_per = self.data[0].shape[0]
+
+        Z = [0]*n_per
 
         for i in range(1, len(self.data)):
             data = np.vstack((data, np.copy(self.data[i])))
-            Z += [i]*self.data[i].shape[0]
+            if len(self.data[i].shape) == 1:
+                n_per = 1
+            else:
+                n_per = self.data[i].shape[0]
+
+            Z += [i]*n_per
 
         assert len(data) == len(Z)
         return data, Z
