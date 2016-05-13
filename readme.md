@@ -35,11 +35,18 @@ $ brew update
 $ brew install armadillo
 ```
 
-### Install (may require `sudo`).
+### Install.
 From inside the virtual environment navigate to the main directory (the directory with this readme)
 ```bash
 (ids)$ python setup.py install
 ```
+Or if you intend to edit the source:
+
+```bash
+(ids)$ python setup.py develop
+(ids)$ export PYTHONPATH=$PYTHONPATH:`pwd`
+```
+
 You should be good-to-go now.
 
 ### Testing (you should *really* do this before you run anything)
