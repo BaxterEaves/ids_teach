@@ -24,16 +24,16 @@ import os
 
 cmdclass = dict()
 
-USE_CYTHON = os.environ.get('USE_CYTHON', False)
-if USE_CYTHON:
+NO_CYTHON = os.environ.get('NO_CYTHON', False)
+if NO_CYTHON:
+    print('Using pre-built cython files.')
+    ext = '.cpp'
+else:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
     cmdclass['build_ext'] = build_ext
     print('Using cython.')
     ext = '.pyx'
-else:
-    print('Using pre-built cython files.')
-    ext = '.cpp'
 
 extensions = [Extension("idsteach.fastniw",
                         sources=["idsteach/fastniw"+ext, "src/dpgmm.cpp"],
@@ -44,7 +44,7 @@ extensions = [Extension("idsteach.fastniw",
                         include_dirs=['src'],
                         language="c++")]
 
-if USE_CYTHON:
+if not NO_CYTHON:
     extensions = cythonize(extensions)
 
 install_reqs = parse_requirements('requirements.txt', session=False)
