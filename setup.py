@@ -19,21 +19,15 @@ from setuptools import setup
 from setuptools import find_packages
 from distutils.core import Extension
 from pip.req import parse_requirements
+from Cython.Build import cythonize
+from Cython.Distutils import build_ext
 
-import os
 
 cmdclass = dict()
 
-NO_CYTHON = os.environ.get('NO_CYTHON', False)
-if NO_CYTHON:
-    print('Using pre-built cython files.')
-    ext = '.cpp'
-else:
-    from Cython.Build import cythonize
-    from Cython.Distutils import build_ext
-    cmdclass['build_ext'] = build_ext
-    print('Using cython.')
-    ext = '.pyx'
+cmdclass['build_ext'] = build_ext
+print('Using cython.')
+ext = '.pyx'
 
 extensions = [Extension("idsteach.fastniw",
                         sources=["idsteach/fastniw"+ext, "src/dpgmm.cpp"],
@@ -44,8 +38,7 @@ extensions = [Extension("idsteach.fastniw",
                         include_dirs=['src'],
                         language="c++")]
 
-if not NO_CYTHON:
-    extensions = cythonize(extensions)
+extensions = cythonize(extensions)
 
 install_reqs = parse_requirements('requirements.txt', session=False)
 reqs = [str(ir.req) for ir in install_reqs]
