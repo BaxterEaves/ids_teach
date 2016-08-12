@@ -1,0 +1,31 @@
+# http://conda.pydata.org/docs/travis.html
+language: python
+dist: trusty
+
+python:
+    - "3.4"
+
+before_install:
+    - sudo apt-get update -qq
+    - sudo apt-get install -qq libboost-all-dev liblapack-dev libblas-dev libarmadillo-dev
+
+install:
+    - if [[ "$TRAVIS_PYTHON_VERSION" == "2.7" ]]; then
+        wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O miniconda.sh;
+      else
+        wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
+      fi
+    - bash miniconda.sh -b -p $HOME/miniconda
+    - export PATH="$HOME/miniconda/bin:$PATH"
+    - hash -r
+    - conda config --set always_yes yes --set changeps1 no
+    - conda update -q conda
+    - conda info -a
+    - conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION cython numpy scipy matplotlib seaborn pytest pandas scikit-learn
+    - source activate test-environment
+    - pip install progressbar33
+    - python setup.py develop
+    - export PYTHONPATH=`pwd`/ids_teach:$PYTHONPATH
+
+
+script: py.test idsteach
