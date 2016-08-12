@@ -1,4 +1,7 @@
 # Code for "Infant-directed speech is consistent with teaching"
+
+![Travis-CI status](https://travis-ci.org/BaxterEaves/ids_teach.svg?branch=master)
+
 This is the code used to generate data in the paper 
 
 Eaves, B., Feldman, N., Griffiths, T., & Shafto, P. (2016) Infant-directed speech is consistent with Teaching. *Psychological Review*
